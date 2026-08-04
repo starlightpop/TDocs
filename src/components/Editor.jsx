@@ -97,7 +97,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total' }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -240,6 +240,22 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 选中文字统计：选区变化时上报选中字符数（0 表示无选区）
+  useEffect(() => {
+    if (!editor) return
+    const report = () => {
+      const { from, to } = editor.state.selection
+      onSelection?.(from !== to ? editor.state.doc.textBetween(from, to).length : 0)
+    }
+    editor.on('selectionUpdate', report)
+    editor.on('transaction', report)
+    return () => {
+      editor.off('selectionUpdate', report)
+      editor.off('transaction', report)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor])
 
   // 分页模式：分页位置对齐段落边界，不会把文字从中间切断
   useEffect(() => {

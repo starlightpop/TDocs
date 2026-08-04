@@ -11,8 +11,17 @@ export default function Sidebar({
 }) {
   const [query, setQuery] = useState('')
   const [ctxMenu, setCtxMenu] = useState(null)
+  const [dotsOpenId, setDotsOpenId] = useState(null)
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set())
   const [editName, setEditName] = useState('')
+
+  // 点击外部关闭三点菜单
+  useEffect(() => {
+    if (!dotsOpenId) return
+    const close = () => setDotsOpenId(null)
+    setTimeout(() => window.addEventListener('click', close), 0)
+    return () => window.removeEventListener('click', close)
+  }, [dotsOpenId])
 
   // 进入内联编辑时初始化名称（新建或重命名文件夹）
   useEffect(() => {
@@ -78,15 +87,35 @@ export default function Sidebar({
       >
         <div className="doc-item-title">{doc.title || '无标题文档'}</div>
         <div className="doc-item-meta">
-          {formatTime(doc.updatedAt)} · {stripHtml(doc.content).slice(0, 24) || '空文档'}
+          {formatTime(doc.updatedAt)}
         </div>
         <div className="doc-item-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" data-tip="重命名" onClick={() => onRename(doc)}>
-            <Icon name="edit" size={14} />
+          <button
+            className="icon-btn"
+            data-tip="更多操作"
+            aria-label="更多操作"
+            onClick={(e) => { e.stopPropagation(); setDotsOpenId(dotsOpenId === doc.id ? null : doc.id) }}
+          >
+            <Icon name="dots" size={15} />
           </button>
-          <button className="icon-btn" data-tip="删除" onClick={() => onDelete(doc)}>
-            <Icon name="trash" size={14} />
-          </button>
+          {dotsOpenId === doc.id && (
+            <div className="menu doc-dots-menu" onClick={(e) => e.stopPropagation()}>
+              {docMenuItems(doc).map((it, i) =>
+                it.sep ? (
+                  <div key={i} className="menu-sep" />
+                ) : (
+                  <button
+                    key={i}
+                    className={`menu-item${it.danger ? ' danger' : ''}`}
+                    onClick={() => { setDotsOpenId(null); it.action() }}
+                  >
+                    {it.icon}
+                    <span>{it.label}</span>
+                  </button>
+                ),
+              )}
+            </div>
+          )}
         </div>
       </div>
       {/* 当前文档的标题树（类 Google Docs 文档大纲，再次点击文档可收起） */}

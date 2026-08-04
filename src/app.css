@@ -200,7 +200,7 @@ html.platform-mac .topbar .menu {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .btn-primary:hover {
   background: var(--accent-hover);
@@ -323,13 +323,17 @@ html.platform-mac .topbar .menu {
   border-radius: var(--radius-sm);
   cursor: pointer;
   margin-bottom: 2px;
-  transition: background 0.12s;
+  /* 未选中也有稍暗边框，避免看不清 */
+  border: 1px solid var(--border);
+  background: transparent;
+  transition: background 0.12s, border-color 0.12s;
 }
 .doc-item:hover {
   background: var(--surface-2);
 }
 .doc-item.active {
   background: var(--accent-soft);
+  border-color: var(--accent);
 }
 .doc-item-title {
   font-size: 13.5px;
@@ -359,7 +363,8 @@ html.platform-mac .topbar .menu {
   gap: 2px;
   background: inherit;
 }
-.doc-item:hover .doc-item-actions {
+.doc-item:hover .doc-item-actions,
+.doc-item.active .doc-item-actions {
   display: flex;
 }
 .doc-item-actions .icon-btn {
@@ -369,6 +374,14 @@ html.platform-mac .topbar .menu {
 .doc-item-actions .icon-btn svg {
   width: 14px;
   height: 14px;
+}
+/* 三点菜单：相对文档卡片定位 */
+.doc-dots-menu {
+  top: calc(100% + 2px);
+  left: 0;
+  right: auto;
+  width: 170px;
+  z-index: 40;
 }
 
 /* 当前文档的标题树（侧边栏内嵌大纲） */
@@ -467,12 +480,15 @@ html.platform-mac .topbar .menu {
 }
 
 .sidebar-footer {
-  padding: 10px 14px;
+  height: 30px;  /* 与主状态栏等高，基线对齐 */
+  padding: 0 14px;
   border-top: 1px solid var(--border);
   font-size: 11.5px;
   color: var(--text-3);
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 /* ---------- 主区域 ---------- */
@@ -564,7 +580,7 @@ html.platform-mac .topbar .menu {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--accent), #9d4edd);
-  color: #fff;
+  color: var(--accent-text);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -976,6 +992,61 @@ html.platform-mac .topbar .menu {
 .statusbar-link.active {
   color: var(--accent);
   background: var(--accent-soft);
+}
+.statusbar-selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+/* 缩放菜单：状态栏在底部，向上弹出 */
+.zoom-wrap {
+  position: relative;
+}
+.zoom-menu {
+  bottom: calc(100% + 6px);
+  top: auto;
+  right: 0;
+  min-width: 120px;
+}
+
+/* 设置菜单（⚙️） */
+.settings-menu {
+  width: 230px;
+}
+.settings-label {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 8px 12px 4px;
+}
+.settings-seg {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px 6px;
+}
+.settings-seg button {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.settings-seg button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.settings-seg button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.settings-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
 }
 
 /* ---------- 大纲面板 ---------- */
@@ -1584,7 +1655,7 @@ html.platform-mac .topbar .menu {
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--accent-text);
 }
 .btn-danger:hover {
   filter: brightness(1.08);

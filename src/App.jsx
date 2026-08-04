@@ -142,6 +142,10 @@ export default function App() {
   ]
 
   // 浅色/深色组各自记住最后选择的主题，跟随系统时自动切换
+  useEffect(() => {
+    saveTheme(themePref)
+  }, [themePref])
+
   const [lightKey, setLightKey] = useState(() => {
     const saved = localStorage.getItem('inkdocs.themeLight')
     return THEMES[saved] ? saved : 'clean'
@@ -224,6 +228,9 @@ export default function App() {
   })
   const [saveState, setSaveState] = useState('saved') // saved | saving
   const [stats, setStats] = useState({ words: 0, chars: 0 })
+  const [selectedChars, setSelectedChars] = useState(0)
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
@@ -419,6 +426,14 @@ export default function App() {
     setShowExportMenu(false)
   }
 
+  // 点击外部关闭缩放菜单 / 设置菜单
+  useEffect(() => {
+    if (!zoomMenuOpen && !showSettings) return
+    const close = () => { setZoomMenuOpen(false); setShowSettings(false) }
+    setTimeout(() => window.addEventListener('click', close), 0)
+    return () => window.removeEventListener('click', close)
+  }, [zoomMenuOpen, showSettings])
+
   // 点击外部关闭标尺菜单
   useEffect(() => {
     if (!rulerOpen) return
@@ -515,31 +530,36 @@ export default function App() {
             </optgroup>
           </select>
 
-          {/* 分页样式（仅 A4/B5 时显示） */}
-          {paper !== 'wide' && (
-            <select
-              className="tb-select paper-select"
-              value={breakStyle}
-              onChange={(e) => setBreakStyle(e.target.value)}
-              title="分页样式：虚线分页 / 分离页面"
+          {/* 设置（⚙️）：不常用设置集中于此 */}
+          <div className="menu-wrap">
+            <button
+              className="icon-btn"
+              data-tip="设置"
+              onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); setShowThemeMenu(false); setShowExportMenu(false) }}
             >
-              <option value="dashed">虚线</option>
-              <option value="split">分离</option>
-            </select>
-          )}
-
-          {/* 页码标签样式（仅分页模式，与分页样式相邻） */}
-          {paper !== 'wide' && (
-            <select
-              className="tb-select paper-select"
-              value={pageLabelStyle}
-              onChange={(e) => setPageLabelStyle(e.target.value)}
-              title="页码标签：当前页/总页数，或上页/下页"
-            >
-              <option value="total">总数</option>
-              <option value="pair">相邻</option>
-            </select>
-          )}
+              <Icon name="settings" />
+            </button>
+            {showSettings && (
+              <div className="menu settings-menu" onClick={(e) => e.stopPropagation()}>
+                {paper !== 'wide' ? (
+                  <>
+                    <div className="settings-label">分页样式</div>
+                    <div className="settings-seg">
+                      <button className={breakStyle === 'dashed' ? 'active' : ''} title="页与页之间用虚线标记" onClick={() => setBreakStyle('dashed')}>虚线</button>
+                      <button className={breakStyle === 'split' ? 'active' : ''} title="每页独立成块，页间灰带分开" onClick={() => setBreakStyle('split')}>分离</button>
+                    </div>
+                    <div className="settings-label">页码标签</div>
+                    <div className="settings-seg">
+                      <button className={pageLabelStyle === 'total' ? 'active' : ''} title="第 1 页 / 共 54 页" onClick={() => setPageLabelStyle('total')}>总数</button>
+                      <button className={pageLabelStyle === 'pair' ? 'active' : ''} title="第 1 页 / 第 2 页" onClick={() => setPageLabelStyle('pair')}>相邻</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="settings-empty">切换到 A4/B5 后，分页相关设置出现在这里</div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* 页边距（左右宽距）——已迁移到正文上方标尺，点击标尺弹出阈值切换 */}
 
@@ -608,8 +628,15 @@ export default function App() {
                             style={{ background: t.colors['surface-2'], borderColor: t.accent }}
                             data-tip={t.name}
                             onClick={() => {
-                              if (t.mode === 'dark') setDarkKey(k)
-                              else setLightKey(k)
+                              // 点击色卡立即切换：浅色系 → 浅色主题，深色系 → 深色主题
+                              if (t.mode === 'dark') {
+                                setDarkKey(k)
+                                setThemePref('dark')
+                              } else {
+                                setLightKey(k)
+                                setThemePref('light')
+                              }
+                              setShowThemeMenu(false)
                             }}
                           >
                             <span
@@ -695,18 +722,36 @@ export default function App() {
                 pageH={PAPER[paper]?.[2] || 0}
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
+                onSelection={setSelectedChars}
               />
               <div className="statusbar">
                 <span>{stats.words} 词</span>
                 <span>{stats.chars} 字符</span>
+                {selectedChars > 0 && <span className="statusbar-selected">已选 {selectedChars} 字符</span>}
                 <div className="right">
-                  <button
-                    className="statusbar-link"
-                    title="⌘/Ctrl + 滚轮可调节字号，点击重置"
-                    onClick={() => setZoom(1)}
-                  >
-                    {Math.round(zoom * 100)}%
-                  </button>
+                  <div className="menu-wrap zoom-wrap">
+                    <button
+                      className="statusbar-link"
+                      title="点击选择常用缩放比例；⌘/Ctrl + 滚轮可微调"
+                      onClick={(e) => { e.stopPropagation(); setZoomMenuOpen(!zoomMenuOpen) }}
+                    >
+                      {Math.round(zoom * 100)}%
+                    </button>
+                    {zoomMenuOpen && (
+                      <div className="menu zoom-menu" onClick={(e) => e.stopPropagation()}>
+                        {[25, 50, 75, 100, 125, 150, 175, 200].map((v) => (
+                          <button
+                            key={v}
+                            className={`menu-item${Math.round(zoom * 100) === v ? ' active' : ''}`}
+                            onClick={() => { setZoom(v / 100); setZoomMenuOpen(false) }}
+                          >
+                            <span>{v}%</span>
+                            {Math.round(zoom * 100) === v && <span className="menu-item-check">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button
                     className={`statusbar-link${showOutline ? ' active' : ''}`}
                     onClick={() => setShowOutline(!showOutline)}

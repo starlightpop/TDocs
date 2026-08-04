@@ -14,6 +14,11 @@ export function scrollToHeadingByIndex(editor, index) {
   const el = nodes?.[index]
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // 光标同步移到标题处，避免停留在原地
+  const pos = editor.view.posAtDOM(el, 0)
+  if (pos != null) {
+    editor.chain().focus().setTextSelection(pos).run()
+  }
 }
 
 /**

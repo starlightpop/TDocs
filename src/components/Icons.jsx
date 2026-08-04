@@ -113,6 +113,9 @@ export const Icons = {
   dots: (
     <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /><circle cx="19" cy="12" r="1.8" fill="currentColor" /></svg>
   ),
+  settings: (
+    <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3.2" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.07-.4.1-.8.1-1.2z" /></svg>
+  ),
   doc: (
     <svg viewBox="0 0 24 24" {...p}><path d="M6 2h8l5 5v15H6z" /><path d="M14 2v5h5M9 12h7M9 16h7" /></svg>
   ),
