@@ -422,7 +422,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
                   width: pageMetaRef.current.width,
                 }}
               >
-                <span className="page-gap-label">第 {k + 1} / {k + 2} 页</span>
+                <span className="page-gap-label">第 {k + 1} 页 / 第 {k + 2} 页</span>
               </div>
             ))}
           </div>

@@ -15,7 +15,7 @@ function createWindow() {
       ? {
           titleBarStyle: 'hiddenInset',
           // 红绿灯垂直居中于顶栏（topbar 高 56，中心 28；默认位置偏上）
-          trafficLightPosition: { x: 16, y: 22 },
+          trafficLightPosition: { x: 16, y: 20 },
         }
       : {}),
     backgroundColor: '#f5f6f8',
