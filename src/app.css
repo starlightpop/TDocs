@@ -138,7 +138,7 @@ html.platform-mac .topbar .menu {
 .ruler-grip-l,
 .ruler-grip-r {
   position: absolute;
-  top: 0;
+  top: 2px;  /* 三角尖（底部 y=11）正好压在灰白交界线中心 */
   width: 0;
   height: 0;
   border-left: 6px solid transparent;
