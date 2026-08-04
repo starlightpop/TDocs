@@ -252,28 +252,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   // 选中文字统计：选区变化时上报选中字符数，并定位浮动条
   useEffect(() => {
     if (!editor) return
-    const report = () => {
-      const { from, to } = editor.state.selection
-      const len = from !== to ? editor.state.doc.textBetween(from, to).length : 0
-      onSelection?.(len)
-      if (from === to) { setBubblePos(null); return }
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const sel = window.getSelection()
-      if (!sel?.rangeCount) return
-      const rect = sel.getRangeAt(0).getBoundingClientRect()
-      if (rect.width < 1) return
-      const cr = canvas.getBoundingClientRect()
-      setBubblePos({
-        top: rect.top - cr.top + canvas.scrollTop,
-        left: rect.left - cr.left + canvas.scrollLeft + rect.width / 2,
-      })
-    }
-    editor.on('selectionUpdate', report)
-    editor.on('transaction', report)
+    editor.on('selectionUpdate', updateBubble)
+    editor.on('transaction', updateBubble)
     return () => {
-      editor.off('selectionUpdate', report)
-      editor.off('transaction', report)
+      editor.off('selectionUpdate', updateBubble)
+      editor.off('transaction', updateBubble)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
@@ -440,7 +423,30 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   }
 
   // 段落悬停：定位当前 hover 的内容块，显示左侧手柄
+  const updateHandle = () => {
+    const block = hoverBlockRef.current
+    if (!block) return
+    const rect = block.getBoundingClientRect()
+    setHoverBlock({ top: rect.top, left: rect.left })
+  }
+
+  // 选区浮动条定位（视口坐标，滚动时重新计算）
+  const updateBubble = () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const len = from !== to ? editor.state.doc.textBetween(from, to).length : 0
+    onSelection?.(len)
+    if (from === to) { setBubblePos(null); return }
+    const sel = window.getSelection()
+    if (!sel?.rangeCount) return
+    const rect = sel.getRangeAt(0).getBoundingClientRect()
+    if (rect.width < 1) return
+    setBubblePos({ top: rect.top, left: rect.left + rect.width / 2 })
+  }
+
   const onCanvasMove = (e) => {
+    // 手柄/菜单自身不参与块检测，避免移过去就消失
+    if (e.target.closest?.('.para-handle, .para-handle-menu')) return
     const content = wrapRef.current?.querySelector('.editor-content')
     if (!content || !content.contains(e.target)) {
       setHoverBlock(null)
@@ -451,17 +457,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       setHoverBlock(null)
       return
     }
-    const canvas = e.currentTarget
-    const canvasRect = canvas.getBoundingClientRect()
-    const rect = block.getBoundingClientRect()
     if (block !== hoverBlockRef.current) {
       hoverBlockRef.current = block
       setBlockMenuOpen(false)
     }
-    setHoverBlock({
-      top: rect.top - canvasRect.top + canvas.scrollTop,
-      left: rect.left - canvasRect.left + canvas.scrollLeft,
-    })
+    updateHandle()
   }
 
   // 手柄菜单：设置块级别 / 删除块
@@ -490,6 +490,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       className="canvas"
       ref={canvasRef}
       onMouseMove={onCanvasMove}
+      onScroll={() => { updateHandle(); updateBubble() }}
       onMouseLeave={() => setHoverBlock(null)}
       onContextMenu={(e) => {
         if (!editor) return

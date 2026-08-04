@@ -732,7 +732,7 @@ html.platform-mac .topbar .menu {
 
 /* ---------- 段落悬停手柄（飞书式“大 T”） ---------- */
 .para-handle {
-  position: absolute;
+  position: fixed;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -757,7 +757,7 @@ html.platform-mac .topbar .menu {
   line-height: 1;
 }
 .para-handle-menu {
-  position: absolute;
+  position: fixed;
   min-width: 130px;
   width: max-content;
   z-index: 130;
@@ -768,7 +768,7 @@ html.platform-mac .topbar .menu {
 
 /* ---------- 选中文字浮动工具条（飞书式） ---------- */
 .bubble-wrap {
-  position: absolute;
+  position: fixed;
   display: flex;
   z-index: 500;
 }
@@ -818,7 +818,8 @@ html.platform-mac .topbar .menu {
 .bm-btn svg {
   transition: transform 0.18s;
 }
-.bm-btn.open svg {
+/* 只旋转箭头（最后一个 svg），图标本体（如对齐图标）不旋转 */
+.bm-btn.open svg:last-child {
   transform: rotate(180deg);
 }
 .bm-t {
@@ -2060,4 +2061,112 @@ html.platform-mac .topbar .menu {
   .page {
     padding: 40px 28px;
   }
+}
+
+/* ---------- AI 配置面板（新增：保存/测试/结果） ---------- */
+.ai-cfg-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ai-cfg-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+.ai-cfg-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.ai-test-result {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.ai-test-result.ok {
+  background: rgba(47, 158, 110, 0.14);
+  color: var(--success);
+}
+.ai-test-result.fail {
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--danger);
+}
+
+/* ---------- AI 改写浮动输入框（飞书式） ---------- */
+.ai-prompt {
+  position: fixed;
+  z-index: 900;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
+}
+.ai-prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ai-prompt-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+.ai-prompt-head .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+.ai-prompt-head .icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.ai-prompt-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  box-sizing: border-box;
+}
+.ai-prompt-input:focus {
+  border-color: var(--accent);
+}
+.ai-prompt-input::placeholder {
+  color: var(--text-3);
+}
+.ai-prompt-input.filled {
+  color: var(--text);
+}
+.ai-prompt-error {
+  margin-top: 8px;
+}
+.ai-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ai-prompt-hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.ai-prompt-actions .btn {
+  padding: 5px 14px;
 }

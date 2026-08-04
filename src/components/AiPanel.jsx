@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react'
-import { DOMSerializer } from '@tiptap/pm/model'
+// AI 配置面板：仅负责厂商 / 接口 / Key / 模型 的配置与连接测试
+// 改写功能在浮动输入框 AiPrompt 中完成，不在此处
+import { useState } from 'react'
 import { Icon } from './Icons.jsx'
-import {
-  loadApiConfig, saveApiConfig, callLLM,
-  AI_SYSTEM_PROMPT, cleanLLMOutput, sanitizeHtml,
-} from '../lib/api.js'
+import { loadApiConfig, saveApiConfig, callLLM } from '../lib/api.js'
 
 // 预设主流大模型厂商（均为 OpenAI 兼容接口，2026-08-04 联网核实；models 为各厂商当前主流可选模型）
 export const PROVIDERS = [
@@ -24,96 +22,65 @@ export const PROVIDERS = [
   { id: 'custom', name: '自定义…', baseUrl: '', model: '', models: [] },
 ]
 
-function getSelectionHtml(editor, selection) {
-  const frag = editor.state.doc.slice(selection.from, selection.to).content
-  const dom = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(frag)
-  const tmp = document.createElement('div')
-  tmp.appendChild(dom)
-  return tmp.innerHTML
-}
-
-/** AI 面板：侧边平级显示，便于与正文对照修改 */
-export default function AiPanel({ editor, selection, onClose }) {
+/** AI 配置面板：只做配置与连接测试 */
+export default function AiPanel({ onClose }) {
   const [cfg, setCfg] = useState(loadApiConfig)
-  const [instruction, setInstruction] = useState('')
-  const [scope, setScope] = useState(selection ? 'selection' : 'doc')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState('')
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const [savedTip, setSavedTip] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null) // {ok, msg}
 
   const pickProvider = (id) => {
     const p = PROVIDERS.find((x) => x.id === id)
     if (!p) return
-    if (p.id === 'custom') {
-      setCfg({ ...cfg, provider: 'custom' })
-      return
-    }
-    setCfg({ ...cfg, provider: p.id, baseUrl: p.baseUrl, model: p.model })
+    setCfg({ ...cfg, provider: p.id, baseUrl: p.baseUrl || cfg.baseUrl, model: p.model })
   }
 
-  const run = async () => {
+  const save = () => {
     saveApiConfig(cfg)
+    setSavedTip(true)
+    setTimeout(() => setSavedTip(false), 1600)
+  }
+
+  // 保存配置（改动即存）
+  const update = (patch) => {
+    const next = { ...cfg, ...patch }
+    setCfg(next)
+    saveApiConfig(next)
+    setSavedTip(true)
+    setTimeout(() => setSavedTip(false), 1600)
+  }
+
+  const testConnection = async () => {
     if (!cfg.apiKey.trim()) {
-      setError('请先填写 API Key')
+      setTestResult({ ok: false, msg: '请先填写 API Key' })
       return
     }
-    if (!instruction.trim()) return
-    setLoading(true)
-    setError('')
-    setResult('')
+    setTesting(true)
+    setTestResult(null)
     try {
-      const content =
-        scope === 'selection' && selection
-          ? getSelectionHtml(editor, selection)
-          : editor.getHTML()
       const answer = await callLLM(cfg, [
-        { role: 'system', content: AI_SYSTEM_PROMPT },
-        { role: 'user', content: `修改指令：${instruction.trim()}\n\n文档内容：\n${content}` },
+        { role: 'system', content: '你是连接测试助手。' },
+        { role: 'user', content: '请只回复两个字：正常' },
       ])
-      setResult(cleanLLMOutput(answer))
+      setTestResult({ ok: true, msg: `连接成功：${String(answer).slice(0, 40)}` })
     } catch (e) {
-      setError(e.message || String(e))
+      setTestResult({ ok: false, msg: e.message || String(e) })
     } finally {
-      setLoading(false)
+      setTesting(false)
     }
-  }
-
-  const applyReplace = () => {
-    const html = sanitizeHtml(result)
-    if (scope === 'selection' && selection) {
-      editor.chain().focus().insertContentAt({ from: selection.from, to: selection.to }, html).run()
-    } else {
-      editor.chain().focus().setContent(html, true).run()
-    }
-    setResult('')
-  }
-
-  const applyInsert = () => {
-    editor.chain().focus().insertContent(sanitizeHtml(result)).run()
-    setResult('')
   }
 
   return (
     <aside className="ai-panel">
       <div className="ai-panel-header">
-        <span><Icon name="sparkle" size={15} />AI 改写</span>
+        <span><Icon name="settings" size={15} />AI 配置</span>
         <button className="icon-btn" onClick={onClose} data-tip="关闭"><Icon name="x" size={15} /></button>
       </div>
 
-      {/* 厂商与配置 */}
       <div className="ai-cfg-fields">
         <label>
           厂商
-          <select
-            value={cfg.provider || 'custom'}
-            onChange={(e) => pickProvider(e.target.value)}
-          >
+          <select value={cfg.provider || 'custom'} onChange={(e) => pickProvider(e.target.value)}>
             {PROVIDERS.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -123,7 +90,7 @@ export default function AiPanel({ editor, selection, onClose }) {
           接口地址（OpenAI 兼容）
           <input
             value={cfg.baseUrl}
-            onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value, provider: 'custom' })}
+            onChange={(e) => update({ baseUrl: e.target.value, provider: 'custom' })}
             placeholder="https://api.openai.com/v1"
           />
         </label>
@@ -132,7 +99,7 @@ export default function AiPanel({ editor, selection, onClose }) {
           <input
             type="password"
             value={cfg.apiKey}
-            onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
+            onChange={(e) => update({ apiKey: e.target.value })}
             placeholder="sk-..."
           />
         </label>
@@ -147,8 +114,8 @@ export default function AiPanel({ editor, selection, onClose }) {
                 <select
                   value={inList ? cfg.model : '__custom__'}
                   onChange={(e) => {
-                    if (e.target.value === '__custom__') setCfg({ ...cfg, model: '' })
-                    else setCfg({ ...cfg, model: e.target.value })
+                    if (e.target.value === '__custom__') update({ model: '' })
+                    else update({ model: e.target.value })
                   }}
                 >
                   {modelList.map((m) => (
@@ -159,7 +126,7 @@ export default function AiPanel({ editor, selection, onClose }) {
                 {!inList && (
                   <input
                     value={cfg.model}
-                    onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
+                    onChange={(e) => update({ model: e.target.value })}
                     placeholder="输入自定义模型名称，如 ep-xxxx 或 gpt-5"
                   />
                 )}
@@ -169,46 +136,19 @@ export default function AiPanel({ editor, selection, onClose }) {
         </label>
       </div>
 
-      {/* 指令 */}
-      <textarea
-        className="ai-instruction"
-        value={instruction}
-        onChange={(e) => setInstruction(e.target.value)}
-        placeholder="输入修改指令，例如：润色这段文字，让语言更有画面感…"
-        rows={3}
-        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') run() }}
-      />
-
-      <div className="ai-scope">
-        <label className={scope === 'doc' ? ' on' : ''}>
-          <input type="radio" checked={scope === 'doc'} onChange={() => setScope('doc')} />整篇文档
-        </label>
-        {selection && (
-          <label className={scope === 'selection' ? ' on' : ''}>
-            <input type="radio" checked={scope === 'selection'} onChange={() => setScope('selection')} />仅选中内容
-          </label>
-        )}
-        <span className="ai-scope-hint">⌘/Ctrl+Enter</span>
+      <div className="ai-cfg-actions">
+        <button className="btn" onClick={save} disabled={savedTip}>
+          {savedTip ? '✓ 已保存' : '保存配置'}
+        </button>
+        <button className="btn btn-primary" onClick={testConnection} disabled={testing}>
+          {testing ? '测试中…' : '测试连接'}
+        </button>
       </div>
+      <div className="ai-cfg-hint">配置改动会自动保存；「测试连接」会向所选模型发送一条消息验证连通性。</div>
 
-      <button className="btn btn-primary ai-run-btn" onClick={run} disabled={loading || !instruction.trim()}>
-        {loading ? '生成中…' : '生成'}
-      </button>
-
-      {error && <div className="ai-error">{error}</div>}
-
-      {/* 结果预览：与正文同层，方便对照 */}
-      {result && (
-        <div className="ai-result">
-          <div className="ai-result-label">生成结果（可对照左侧正文）</div>
-          <div className="ai-result-preview editor-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(result) }} />
-          <div className="ai-result-actions">
-            <button className="btn" onClick={run} disabled={loading}>重新生成</button>
-            <button className="btn" onClick={applyInsert}>插入光标处</button>
-            <button className="btn btn-primary" onClick={applyReplace}>
-              {scope === 'selection' && selection ? '替换选中' : '替换全文'}
-            </button>
-          </div>
+      {testResult && (
+        <div className={`ai-test-result${testResult.ok ? ' ok' : ' fail'}`}>
+          {testResult.msg}
         </div>
       )}
     </aside>

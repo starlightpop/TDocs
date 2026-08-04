@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar.jsx'
 import Editor from './components/Editor.jsx'
 import Outline from './components/Outline.jsx'
 import AiPanel from './components/AiPanel.jsx'
+import AiPrompt from './components/AiPrompt.jsx'
 import { Icon } from './components/Icons.jsx'
 import {
   loadDocs, saveDocs, loadActiveId, saveActiveId, createDoc,
@@ -277,8 +278,8 @@ export default function App() {
   const mainRef = useRef(null)
 
   // ---------- AI ----------
-  const [aiOpen, setAiOpen] = useState(false)
-  const aiSelectionRef = useRef(null)
+  const [aiPrompt, setAiPrompt] = useState(null) // {editor, selection, pos}
+  const [aiConfigOpen, setAiConfigOpen] = useState(false)
 
   // 大纲点击跳转后的滚动抑制，避免高亮被滚回上一个标题
   const jumpSuppressRef = useRef(0)
@@ -485,11 +486,30 @@ export default function App() {
   }
 
   // ---------- AI ----------
-  const openAi = () => {
+  const openAi = (e) => {
     if (!editor) return
     const { from, to } = editor.state.selection
-    aiSelectionRef.current = from !== to ? { from, to } : null
-    setAiOpen(true)
+    const selection = from !== to ? { from, to } : null
+    let pos = null
+    if (selection) {
+      const sel = window.getSelection()
+      if (sel?.rangeCount) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect()
+        // 优先显示在选区上方；空间不足时放下方，均不遮挡选中文字
+        pos = {
+          top: rect.top,
+          left: rect.left + rect.width / 2,
+          anchor: rect.top > 240 ? 'above' : 'below',
+        }
+      }
+    }
+    if (!pos) {
+      // 顶栏 AI 按钮下方弹出
+      const btn = e?.currentTarget
+      const r = btn?.getBoundingClientRect?.() || { bottom: 90, left: window.innerWidth / 2, width: 0 }
+      pos = { top: r.bottom, left: r.left + (r.width || 0) / 2, anchor: 'below' }
+    }
+    setAiPrompt({ editor, selection, pos })
   }
 
   // ---------- 导出 ----------
@@ -730,6 +750,14 @@ export default function App() {
                     </div>
                   </>
                 )}
+                <div className="menu-sep" />
+                <button
+                  className="menu-item"
+                  onClick={() => { setShowSettings(false); setAiConfigOpen(true) }}
+                >
+                  <Icon name="sparkle" size={15} />
+                  <span>AI 配置</span>
+                </button>
               </div>
             )}
           </div>
@@ -917,12 +945,18 @@ export default function App() {
               </button>
             </div>
           )}
-          {/* AI 面板：与正文同层平级显示，便于对照修改 */}
-          {aiOpen && activeDoc && (
-            <AiPanel
-              editor={editor}
-              selection={aiSelectionRef.current}
-              onClose={() => setAiOpen(false)}
+          {/* AI 配置面板（只做配置与连接测试） */}
+          {aiConfigOpen && (
+            <AiPanel onClose={() => setAiConfigOpen(false)} />
+          )}
+          {/* AI 改写浮动输入框（选中处上方/顶栏下方，不遮挡选中文字） */}
+          {aiPrompt && (
+            <AiPrompt
+              editor={aiPrompt.editor}
+              selection={aiPrompt.selection}
+              pos={aiPrompt.pos}
+              onClose={() => setAiPrompt(null)}
+              onOpenConfig={() => { setAiConfigOpen(true); setAiPrompt(null) }}
             />
           )}
           {activeDoc && showOutline && (
