@@ -22,7 +22,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
+import { DOMParser as PMDOMParser, DOMSerializer } from '@tiptap/pm/model'
 import { looksLikeMarkdown, renderMarkdown } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
@@ -120,6 +120,27 @@ const AiSelPlugin = new Plugin({
     decorations(state) {
       return aiSelKey.getState(state)
     },
+  },
+})
+
+// ---------- 页节点（A4/B5 真分页：每页独立 DOM，固定尺寸，页间物理空白） ----------
+const Page = Node.create({
+  name: 'page',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  parseHTML: () => [{ tag: 'div[data-page]' }],
+  renderHTML: () => ['div', { 'data-page': 'true' }, 0],
+  addNodeView() {
+    return () => {
+      const wrap = document.createElement('div')
+      wrap.className = 'pm-page-wrap'
+      const pageEl = document.createElement('div')
+      pageEl.dataset.page = 'true'
+      wrap.append(pageEl)
+      // update 返回 true：复用 DOM，避免每次 transaction 重建
+      return { dom: wrap, contentDOM: pageEl, update: () => true }
+    }
   },
 })
 
@@ -278,6 +299,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       FontStyleExt,
       Superscript,
       Subscript,
+      Page,
       AiOldMark,
       AiNewMark,
       AiSelPlugin,
@@ -364,7 +386,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       // 内容防抖保存
       clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
-        onChange?.(ed.getHTML())
+        onChange?.(getSaveHtml())
       }, 600)
     },
   })
@@ -382,16 +404,159 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
+  // 保存用的 HTML：分页模式下把 page 节点展开为普通块（page 结构仅用于显示，不持久化）
+  const getSaveHtml = () => {
+    if (!editor) return ''
+    if (!paged || editor.state.doc.firstChild?.type.name !== 'page') return editor.getHTML()
+    const blocks = []
+    editor.state.doc.forEach((n) => {
+      if (n.type.name === 'page') n.forEach((b) => blocks.push(b))
+      else blocks.push(n)
+    })
+    const container = editor.state.schema.nodes.doc.create(null, blocks)
+    const dom = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(container.content)
+    const tmp = document.createElement('div')
+    tmp.appendChild(dom)
+    return tmp.innerHTML
+  }
+
   // 卸载前冲刷未保存内容
   useEffect(() => {
     return () => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current)
-        onChange?.(editor?.getHTML() || '')
+        onChange?.(getSaveHtml())
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ---------- 真分页（A4/B5）：每页独立 DOM、固定尺寸、溢出自动建新页 ----------
+  // 结构转换：宽屏（doc>block）<-> 分页（doc>page>block）
+  const toPaged = () => {
+    if (!editor) return
+    const { state } = editor
+    if (state.doc.firstChild?.type.name === 'page') return
+    const blocks = []
+    state.doc.forEach((n) => blocks.push(n))
+    if (!blocks.length) return
+    const pageNode = state.schema.nodes.page.create(null, blocks)
+    editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, pageNode))
+  }
+  const toWide = () => {
+    if (!editor) return
+    const { state } = editor
+    if (state.doc.firstChild?.type.name !== 'page') return
+    const blocks = []
+    state.doc.forEach((n) => {
+      if (n.type.name === 'page') n.forEach((b) => blocks.push(b))
+      else blocks.push(n)
+    })
+    const content = blocks.length ? blocks : [state.schema.nodes.paragraph.create()]
+    editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, content))
+  }
+  // 溢出重排：每页内容超出页高时，把页尾块移到下一页（新建或追加）
+  const reflow = () => {
+    if (!editor || !paged) return false
+    const { view, state } = editor
+    // 收集第一个溢出页（不 dispatch，避免遍历中改 state）
+    let target = null
+    state.doc.descendants((node, pos) => {
+      if (target || node.type.name !== 'page') return
+      const dom = view.nodeDOM(pos)
+      if (!dom) return
+      const pageEl = dom.nodeType === 1 && dom.matches('[data-page]') ? dom : dom.querySelector('[data-page]')
+      if (!pageEl) return
+      const overflow = pageEl.scrollHeight - pageEl.clientHeight
+      if (overflow > 2 && node.childCount > 1) {
+        target = { node, pos }
+      }
+    })
+    if (!target) return false
+    const { node, pos } = target
+    const last = node.lastChild
+    const lastFrom = pos + 1 + node.content.size - last.nodeSize
+    const lastTo = lastFrom + last.nodeSize
+    const frag = last.copy(last.content)
+    let tr = state.tr
+    tr = tr.delete(lastFrom, lastTo)
+    const pageSize = tr.doc.nodeAt(pos)?.nodeSize || 1
+    const nextPos = pos + pageSize
+    const after = tr.doc.nodeAt(nextPos)
+    if (after?.type.name === 'page') {
+      tr = tr.insert(nextPos + 1, frag)
+    } else {
+      const newPage = state.schema.nodes.page.create(null, frag)
+      tr = tr.insert(nextPos, newPage)
+    }
+    view.dispatch(tr)
+    return true
+  }
+
+  // paged 切换：结构转换 + 重排
+  useEffect(() => {
+    if (!editor) return
+    if (paged) {
+      toPaged()
+      // 内容变化后按页高重排（rAF 等 DOM 渲染）
+      requestAnimationFrame(() => {
+        let guard = 0
+        while (reflow() && guard++ < 60) { /* 迭代到稳定 */ }
+      })
+    } else {
+      toWide()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paged, editor])
+
+  // 编辑时实时重排（输入导致溢出自动分页）
+  useEffect(() => {
+    if (!editor || !paged) return
+    let raf = 0
+    const schedule = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        let guard = 0
+        while (reflow() && guard++ < 60) { /* 迭代 */ }
+      })
+    }
+    editor.on('transaction', schedule)
+    editor.on('update', schedule)
+    return () => {
+      editor.off('transaction', schedule)
+      editor.off('update', schedule)
+      cancelAnimationFrame(raf)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, paged, pageH])
+
+  // 页码标签（React 渲染，PM 容器外）：每页位置 + 页码
+  const [pageRects, setPageRects] = useState([])
+  // 页码标签兜底：MutationObserver 监听 PM DOM（NodeView 重建也触发），防抖重算页位置
+  useEffect(() => {
+    if (!editor || !paged) return
+    const root = editor.view.dom
+    const calc = () => {
+      const wraps = [...root.querySelectorAll('.pm-page-wrap')]
+      const wrapBox = wrapRef.current?.getBoundingClientRect()
+      if (!wraps.length || !wrapBox) { setPageRects([]); return }
+      setPageRects(wraps.map((w) => {
+        const r = w.getBoundingClientRect()
+        return { top: r.top - wrapBox.top, left: r.left - wrapBox.left, width: r.width, height: r.height }
+      }))
+    }
+    let t = null
+    const mo = new MutationObserver(() => {
+      clearTimeout(t)
+      t = setTimeout(calc, 80)
+    })
+    mo.observe(root, { subtree: true, childList: true, characterData: true })
+    calc()
+    const onScroll = () => { clearTimeout(t); t = setTimeout(calc, 80) }
+    const canvas = canvasRef.current
+    canvas?.addEventListener('scroll', onScroll, { passive: true })
+    return () => { mo.disconnect(); clearTimeout(t); canvas?.removeEventListener('scroll', onScroll) }
+  }, [editor, paged])
 
   // 选中文字统计：选区变化时上报选中字符数，并定位浮动条
   useEffect(() => {
@@ -419,156 +584,17 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiKeepSelection, editor])
 
-  // 分页模式：分页位置对齐段落边界，不会把文字从中间切断
+  // 分页模式：真分页由页节点（data-page）+ 溢出重排实现，旧的分页位置计算不再需要
   useEffect(() => {
-    if (!paged || !pageH) {
-      setBreakOffsets([])
-      // 清除分页留白装饰
-      if (editor?.view) {
-        const sig = JSON.stringify([])
-        if (lastPairsRef.current !== sig) {
-          lastPairsRef.current = sig
-          editor.view.dispatch(editor.state.tr.setMeta(pagePadKey, { pairs: [] }))
-        }
+    setBreakOffsets([])
+    if (editor?.view) {
+      const sig = JSON.stringify([])
+      if (lastPairsRef.current !== sig) {
+        lastPairsRef.current = sig
+        editor.view.dispatch(editor.state.tr.setMeta(pagePadKey, { pairs: [] }))
       }
-      return undefined
     }
-    // 虚线分页：仅计算段落边界位置
-    const computeBreaks = (content) => {
-      const blocks = Array.from(content.children)
-      if (!blocks.length) return []
-      const contentTop = content.getBoundingClientRect().top
-      const infos = blocks.map((b) => ({
-        bottom: b.getBoundingClientRect().bottom - contentTop,
-        margin: parseFloat(getComputedStyle(b).marginBottom) || 0,
-      }))
-      const breaks = []
-      let pageEnd = pageH
-      let i = 0
-      while (i < infos.length - 1) {
-        let best = -1
-        while (i < infos.length - 1 && infos[i].bottom <= pageEnd + 1) {
-          best = i
-          i++
-        }
-        if (best === -1) {
-          breaks.push(infos[i].bottom + infos[i].margin / 2)
-          i++
-        } else {
-          breaks.push(infos[best].bottom + infos[best].margin / 2)
-        }
-        pageEnd = breaks[breaks.length - 1] + pageH
-      }
-      return breaks
-    }
-    let raf = 0
-    const measure = () => {
-      const wrap = wrapRef.current
-      if (!wrap) return
-      const page = wrap.querySelector('.page')
-      const content = wrap.querySelector('.editor-content')
-      if (!page || !content) return
-      const cs = getComputedStyle(page)
-      const padTop = parseFloat(cs.paddingTop) || 64
-      pageMetaRef.current = {
-        top: padTop,
-        left: page.offsetLeft,
-        width: page.offsetWidth,
-      }
-      let offsets = []
-      const breakIndices = [] // 分页边界块索引 [prevIdx, nextIdx]
-      if (breakStyle === 'split') {
-        // 分离页面：留白由 Decoration 类名提供（已生效时布局已含留白）
-        const blocks = Array.from(content.children)
-        if (blocks.length > 1) {
-          // 用 纸张顶边 + 上边距 作为基准，避免首块 margin-top 穿透造成偏移
-          const refTop = page.getBoundingClientRect().top + padTop
-          const bottomOf = (b) => b.getBoundingClientRect().bottom
-          // 第 1 页顶边 = 纸张顶边
-          let pageTopEdge = refTop - padTop
-          let areaEnd = pageTopEdge + pageH - PAGE_PAD
-          let i = 0
-          const pagePads = []
-          while (i < blocks.length - 1) {
-            let best = -1
-            while (i < blocks.length - 1 && bottomOf(blocks[i]) <= areaEnd + 1) {
-              best = i
-              i++
-            }
-            if (best === -1) {
-              best = i // 单段超整页：强制在该段后分页
-              i++
-            }
-            if (best + 1 >= blocks.length) break
-            breakIndices.push([best, best + 1])
-            // 基于“文字底边”（剔除 padding）计算分页边界，保证装饰是否已应用时结果一致
-            const prevPadBottom = parseFloat(getComputedStyle(blocks[best]).paddingBottom) || 0
-            const prevMargin = parseFloat(getComputedStyle(blocks[best]).marginBottom) || 0
-            const prevTextBottom = bottomOf(blocks[best]) - prevPadBottom
-            // 本页内容占用（含顶部留白），底部留白 = 页高 - 占用，保证每页等高且上下对称
-            const occupy = prevTextBottom - pageTopEdge
-            const prevPad = Math.max(PAGE_PAD, Math.round(pageH - occupy))
-            pagePads.push(prevPad)
-            // 分页边界 = 内容底 + 动态底部留白（gap 定位到整页高度处）
-            const boundary = prevTextBottom + prevPad + prevMargin / 2
-            offsets.push(boundary - refTop)
-            // 下一页从边界开始，内容可用到 边界 + 页高 - 下留白
-            pageTopEdge = boundary
-            areaEnd = pageTopEdge + pageH - PAGE_PAD
-          }
-          lastPagePads.current = pagePads
-          // 尾页：最后一块补足到整页高度
-          const lastIdx = blocks.length - 1
-          const lastPadB = parseFloat(getComputedStyle(blocks[lastIdx]).paddingBottom) || 0
-          const lastTextBottom = bottomOf(blocks[lastIdx]) - lastPadB
-          lastTailPad.current = Math.max(PAGE_PAD, Math.round(pageH - (lastTextBottom - pageTopEdge)))
-        }
-      } else {
-        offsets = computeBreaks(content)
-      }
-      // 将分页边界映射为文档节点位置，通过 Decoration 派发留白类名
-      if (breakStyle === 'split' && editor?.view) {
-        const topRanges = []
-        editor.state.doc.forEach((node, offset) => {
-          topRanges.push({ from: offset, to: offset + node.nodeSize })
-        })
-        const pairs = breakIndices
-          .filter(([a, b]) => topRanges[a] && topRanges[b])
-          .map(([a, b], idx) => ({
-            prevFrom: topRanges[a].from,
-            prevTo: topRanges[a].to,
-            prevPad: lastPagePads.current[idx],
-            nextFrom: topRanges[b].from,
-            nextTo: topRanges[b].to,
-          }))
-        // 尾页：最后一块补足到整页高度（上下留白对称）
-        const lastBlock = topRanges[topRanges.length - 1]
-        if (lastBlock && lastTailPad.current != null) {
-          pairs.push({ prevFrom: lastBlock.from, prevTo: lastBlock.to, prevPad: lastTailPad.current, nextFrom: null, nextTo: null })
-        }
-        const sig = JSON.stringify(pairs)
-        if (sig !== lastPairsRef.current) {
-          lastPairsRef.current = sig
-          editor.view.dispatch(editor.state.tr.setMeta(pagePadKey, { pairs }))
-        }
-      }
-      setBreakOffsets((prev) => (JSON.stringify(prev) === JSON.stringify(offsets) ? prev : offsets))
-    }
-    const schedule = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(measure)
-    }
-    schedule()
-    const ro = new ResizeObserver(schedule)
-    const contentEl = wrapRef.current?.querySelector('.editor-content')
-    if (contentEl) ro.observe(contentEl)
-    window.addEventListener('resize', schedule)
-    return () => {
-      cancelAnimationFrame(raf)
-      ro.disconnect()
-      window.removeEventListener('resize', schedule)
-    }
-  }, [paged, pageH, breakStyle, editor])
+  }, [paged, pageH, editor])
 
   // 右键菜单项
   const buildCtxItems = () => {
@@ -648,6 +674,20 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       {aiInline && <AiAcceptCard editor={editor} diff={aiInline} onResolve={onResolveInline} />}
       <div className="page-wrap" ref={wrapRef}>
         <EditorContent editor={editor} className={`page${paged ? ' paged' : ''}`} />
+        {/* 页码层：React 渲染在 PM 容器外，PM 清理不到；随内容滚动定位 */}
+        {paged && pageRects.length > 0 && (
+          <div className="pm-pages-layer">
+            {pageRects.map((r, i) => (
+              <div
+                key={i}
+                className="pm-page-label"
+                style={{ top: r.top + r.height - 26, left: r.left, width: r.width }}
+              >
+                第 {i + 1} 页 / 共 {pageRects.length} 页
+              </div>
+            ))}
+          </div>
+        )}
         {paged && pageH > 0 && breakStyle === 'dashed' && (
           <div className="page-breaks" aria-hidden>
             {breakOffsets.map((off, k) => (

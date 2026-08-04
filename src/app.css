@@ -878,11 +878,32 @@ html.platform-mac .topbar .menu {
 
 /* 分页模式（A4/B5）：Word 式分页显示 */
 .page.paged {
-  /* A4/B5 = 固定大小的独立页面：颜色跟随主题（--page-bg），每页上下 96px 对称边距 */
-  padding-top: 96px;
-  padding-bottom: 96px;
+  /* 真分页：页面容器不再承担纸张样式，每页由 [data-page] 独立呈现 */
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* 每页（一张 A4/B5 纸）：固定尺寸、对称边距 */
+.editor-content .pm-page-wrap {
+  position: relative;
+  margin: 0 0 28px; /* 页间物理空白（两张纸） */
+}
+.editor-content .pm-page-wrap:last-child {
+  margin-bottom: 0;
+}
+.editor-content [data-page] {
+  position: relative;
+  width: 100%;
+  height: var(--page-h, 1123px); /* 固定页高：内容溢出由重排移动到下一页 */
+  padding: 96px var(--page-pad, 72px);
+  background: var(--page-bg);
   border: 1px solid var(--border-strong);
+  border-radius: 4px;
   box-shadow: var(--page-shadow);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 /* 分离页面留白：由 ProseMirror Decoration 类名驱动；
    用 padding 而非 margin，避免相邻外边距合并导致留白减半 */
@@ -2539,3 +2560,20 @@ html.platform-mac .topbar .menu {
 .lang-menu {
   min-width: 120px;
 }
+
+/* 页码层：绝对定位覆盖在编辑内容上（PM 容器外，React 渲染） */
+.pm-pages-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pm-page-label {
+  position: absolute;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+}
+
