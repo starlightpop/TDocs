@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('tdocs', {
   dragExport: (payload) => ipcRenderer.invoke('drag-export', payload),
   // 导出 PDF：主进程渲染后返回 PDF 字节
   exportPdf: (payload) => ipcRenderer.invoke('export-pdf', payload),
+  // 打开本地文件（系统对话框），返回 [{name, content}]
+  openFiles: () => ipcRenderer.invoke('open-files'),
 })

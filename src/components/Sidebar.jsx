@@ -8,7 +8,7 @@ export default function Sidebar({
   onSelect, onCreate, onRename, onDelete,
   onMoveDoc, onAddGroup, onRenameGroup, onDeleteGroup,
   onJumpHeading, treeOpen = true, editingGroupId, onCommitGroupName,
-  onRenameDoc, onSetHeadingLevel, onDragExport,
+  onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles,
 }) {
   const [query, setQuery] = useState('')
   const [ctxMenu, setCtxMenu] = useState(null)
@@ -80,8 +80,22 @@ export default function Sidebar({
         onDoubleClick={() => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) }}
         draggable
         onDragStart={(e) => {
+          // 自定义拖拽跟手卡片，替换默认拖影
+          const ghost = document.createElement('div')
+          ghost.className = 'drag-ghost'
+          const icon = document.createElement('span')
+          icon.className = 'drag-ghost-icon'
+          icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5M9 12h7M9 16h7"/></svg>'
+          const label = document.createElement('span')
+          label.className = 'drag-ghost-label'
+          label.textContent = doc.title || '无标题文档'
+          ghost.appendChild(icon)
+          ghost.appendChild(label)
+          document.body.appendChild(ghost)
+          e.dataTransfer.setDragImage(ghost, 20, 20)
           e.dataTransfer.setData('text/tdocs-doc', doc.id)
           e.dataTransfer.effectAllowed = 'copyMove'
+          setTimeout(() => ghost.remove(), 0)
         }}
         onDragEnd={(e) => {
           // 未落到有效目标（如拖出窗口）→ 导出该文档
@@ -265,6 +279,9 @@ export default function Sidebar({
           </div>
           <button className="icon-btn" data-tip="新建文件夹" onClick={onAddGroup}>
             <Icon name="folder" size={16} />
+          </button>
+          <button className="icon-btn" data-tip="打开本地文件" onClick={onOpenFiles}>
+            <Icon name="folderOpen" size={16} />
           </button>
         </div>
       </div>

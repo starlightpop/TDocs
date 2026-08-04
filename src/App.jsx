@@ -13,6 +13,7 @@ import {
 } from './lib/storage.js'
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
+import { renderMarkdown } from './lib/markdown.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs ✨</h1>
@@ -437,6 +438,42 @@ export default function App() {
     } catch { /* 拖出导出失败时静默 */ }
   }
 
+  // 外部文件 → 文档（支持 md/txt/html）
+  const importFiles = (files) => {
+    if (!files?.length) return
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    const newDocs = files.map((f) => {
+      const title = String(f.name || '未命名').replace(/\.(md|markdown|txt|html?)$/i, '') || '未命名'
+      let content = ''
+      if (/\.(md|markdown)$/i.test(f.name)) content = renderMarkdown(f.content)
+      else if (/\.(html?)$/i.test(f.name)) content = f.content
+      else content = String(f.content).split(/\r?\n/).map((l) => `<p>${esc(l)}</p>`).join('')
+      return { ...createDoc(title), content, group: activeDoc?.group || '' }
+    })
+    persist([...newDocs, ...docs])
+    setActiveId(newDocs[0].id)
+    setEditor(null)
+    setHeadings([])
+  }
+
+  // 从系统对话框打开本地文件
+  const handleOpenFiles = async () => {
+    const files = await window.tdocs?.openFiles?.()
+    importFiles(files)
+  }
+
+  // 外部文件拖入窗口任意位置 → 导入（应用内拖拽不受影响）
+  const handleWindowDrop = (e) => {
+    const docId = e.dataTransfer.getData('text/tdocs-doc')
+    if (docId) return // 应用内拖拽，交给文件夹 drop 处理
+    const files = [...(e.dataTransfer.files || [])]
+      .filter((f) => /\.(md|markdown|txt|html?)$/i.test(f.name))
+      .map((f) => ({ name: f.name, read: f.text() }))
+    if (!files.length) return
+    e.preventDefault()
+    Promise.all(files.map(async (f) => ({ name: f.name, content: await f.read }))).then(importFiles)
+  }
+
   // 文件夹拖拽排序：把 gid 移到 targetId 前面
   const handleReorderGroups = (gid, targetId) => {
     const next = groups.filter((g) => g.id !== gid)
@@ -540,7 +577,7 @@ export default function App() {
     if (!canvas) return
     const onScroll = () => {
       if (Date.now() < jumpSuppressRef.current) return
-      const els = document.querySelectorAll('.editor-content h1, .editor-content h2, .editor-content h3')
+      const els = document.querySelectorAll('.editor-content h1, .editor-content h2, .editor-content h3, .editor-content h4, .editor-content h5, .editor-content h6')
       if (!els.length) {
         setActiveHeadingIdx(-1)
         return
@@ -562,7 +599,16 @@ export default function App() {
   }, [showOutline, activeId, headings.length])
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      onDragOver={(e) => {
+        // 允许外部文件拖入（应用内拖拽不影响）
+        if ([...(e.dataTransfer.files || [])].some((f) => f.name && /\.(md|markdown|txt|html?)$/i.test(f.name))) {
+          e.preventDefault()
+        }
+      }}
+      onDrop={handleWindowDrop}
+    >
       {/* 顶部栏 */}
       <header className="topbar">
         <button className="icon-btn" data-tip="切换侧边栏" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
@@ -748,6 +794,7 @@ export default function App() {
           onSetHeadingLevel={setHeadingsLevel}
           onDragExport={handleDragExport}
           onReorderGroups={handleReorderGroups}
+          onOpenFiles={handleOpenFiles}
         />
 
         <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${pagePad}px` }}>

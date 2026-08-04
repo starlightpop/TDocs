@@ -2,7 +2,7 @@
 
 export function extractHeadings(editor) {
   if (!editor?.view?.dom) return []
-  const nodes = editor.view.dom.querySelectorAll('h1, h2, h3')
+  const nodes = editor.view.dom.querySelectorAll('h1, h2, h3, h4, h5, h6')
   return Array.from(nodes)
     .map((el) => ({ level: Number(el.tagName[1]), text: el.textContent.trim() }))
     .filter((h) => h.text)
@@ -10,7 +10,7 @@ export function extractHeadings(editor) {
 
 /** 按当前 DOM 顺序跳转到第 index 个标题（不依赖持久 id，永不失效） */
 export function scrollToHeadingByIndex(editor, index) {
-  const nodes = editor?.view?.dom?.querySelectorAll('h1, h2, h3')
+  const nodes = editor?.view?.dom?.querySelectorAll('h1, h2, h3, h4, h5, h6')
   const el = nodes?.[index]
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })

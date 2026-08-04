@@ -12,6 +12,9 @@ const BLOCK_OPTIONS = [
   ['h1', '标题 1'],
   ['h2', '标题 2'],
   ['h3', '标题 3'],
+  ['h4', '标题 4'],
+  ['h5', '标题 5'],
+  ['h6', '标题 6'],
   ['bulletList', '无序列表'],
   ['orderedList', '有序列表'],
   ['taskList', '任务列表'],
@@ -74,6 +77,9 @@ export default function Toolbar({ editor, onAi }) {
     if (editor.isActive('heading', { level: 1 })) return 'h1'
     if (editor.isActive('heading', { level: 2 })) return 'h2'
     if (editor.isActive('heading', { level: 3 })) return 'h3'
+    if (editor.isActive('heading', { level: 4 })) return 'h4'
+    if (editor.isActive('heading', { level: 5 })) return 'h5'
+    if (editor.isActive('heading', { level: 6 })) return 'h6'
     if (editor.isActive('bulletList')) return 'bulletList'
     if (editor.isActive('orderedList')) return 'orderedList'
     if (editor.isActive('taskList')) return 'taskList'

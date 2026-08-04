@@ -214,6 +214,8 @@ function nodeToMd(node, ctx) {
     case 'h2': return `\n## ${inner().trim()}\n\n`
     case 'h3': return `\n### ${inner().trim()}\n\n`
     case 'h4': return `\n#### ${inner().trim()}\n\n`
+    case 'h5': return `\n##### ${inner().trim()}\n\n`
+    case 'h6': return `\n###### ${inner().trim()}\n\n`
     case 'p': {
       if (node.querySelector('img')) return nodesToMd(node, ctx)
       const text = inner().trim()

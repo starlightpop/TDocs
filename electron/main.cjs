@@ -1,5 +1,5 @@
 // TDocs 桌面端主进程（Electron）
-const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
@@ -95,6 +95,25 @@ function registerIpc() {
     } finally {
       pdfWin.destroy()
     }
+  })
+
+  // 打开本地文件（系统对话框）：返回 [{name, content}]
+  ipcMain.handle('open-files', async () => {
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    if (!win) return []
+    const res = await dialog.showOpenDialog(win, {
+      title: '打开文档',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '文档', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] }],
+    })
+    if (res.canceled || !res.filePaths?.length) return []
+    const out = []
+    for (const p of res.filePaths) {
+      try {
+        out.push({ name: path.basename(p), content: await fs.promises.readFile(p, 'utf8') })
+      } catch { /* 跳过不可读文件 */ }
+    }
+    return out
   })
 }
 
