@@ -742,27 +742,27 @@ export default function App() {
           {activeDoc && (
             <div className="menu-wrap">
               <button className="btn" onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu) }}>
-                <Icon name="download" size={15} /> 导出
+                <Icon name="download" size={15} />导出
               </button>
               {showExportMenu && (
                 <div className="menu" onClick={(e) => e.stopPropagation()}>
                   <button className="menu-item" onClick={() => doExport('pdf')}>
-                    <Icon name="download" size={15} /> PDF (.pdf)
+                    <Icon name="download" size={15} />PDF (.pdf)
                   </button>
                   <button className="menu-item" onClick={() => doExport('docx')}>
-                    <Icon name="doc" size={15} /> Word (.docx)
+                    <Icon name="doc" size={15} />Word (.docx)
                   </button>
                   <button className="menu-item" onClick={() => doExport('epub')}>
-                    <Icon name="doc" size={15} /> EPUB (.epub)
+                    <Icon name="doc" size={15} />EPUB (.epub)
                   </button>
                   <button className="menu-item" onClick={() => doExport('md')}>
-                    <Icon name="doc" size={15} /> Markdown (.md)
+                    <Icon name="doc" size={15} />Markdown (.md)
                   </button>
                   <button className="menu-item" onClick={() => doExport('html')}>
-                    <Icon name="doc" size={15} /> 网页 (.html)
+                    <Icon name="doc" size={15} />网页 (.html)
                   </button>
                   <button className="menu-item" onClick={() => doExport('txt')}>
-                    <Icon name="doc" size={15} /> 纯文本 (.txt)
+                    <Icon name="doc" size={15} />纯文本 (.txt)
                   </button>
                 </div>
               )}
@@ -913,7 +913,7 @@ export default function App() {
               <div className="big-icon"><Icon name="doc" size={64} /></div>
               <h2>还没有文档</h2>
               <button className="btn btn-primary" onClick={handleCreate}>
-                <Icon name="plus" size={15} /> 创建第一篇文档
+                <Icon name="plus" size={15} />创建第一篇文档
               </button>
             </div>
           )}

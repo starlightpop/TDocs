@@ -22,6 +22,7 @@ import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import { looksLikeMarkdown, renderMarkdown } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
+import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
 
 // 将 HTML 内容转换并插入到编辑器指定位置
@@ -103,6 +104,13 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const [breakOffsets, setBreakOffsets] = useState([])
   const wrapRef = useRef(null)
   const pageMetaRef = useRef({ top: 64, left: 0, width: 0 })
+  // 段落悬停手柄（飞书式“大 T”）：{ top, left } 相对 canvas
+  const [hoverBlock, setHoverBlock] = useState(null)
+  const [blockMenuOpen, setBlockMenuOpen] = useState(false)
+  const hoverBlockRef = useRef(null)
+  // 选中文字浮动条位置
+  const [bubblePos, setBubblePos] = useState(null)
+  const canvasRef = useRef(null)
   const lastPairsRef = useRef('')
 
   const extensions = useMemo(
@@ -241,12 +249,25 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 选中文字统计：选区变化时上报选中字符数（0 表示无选区）
+  // 选中文字统计：选区变化时上报选中字符数，并定位浮动条
   useEffect(() => {
     if (!editor) return
     const report = () => {
       const { from, to } = editor.state.selection
-      onSelection?.(from !== to ? editor.state.doc.textBetween(from, to).length : 0)
+      const len = from !== to ? editor.state.doc.textBetween(from, to).length : 0
+      onSelection?.(len)
+      if (from === to) { setBubblePos(null); return }
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const sel = window.getSelection()
+      if (!sel?.rangeCount) return
+      const rect = sel.getRangeAt(0).getBoundingClientRect()
+      if (rect.width < 1) return
+      const cr = canvas.getBoundingClientRect()
+      setBubblePos({
+        top: rect.top - cr.top + canvas.scrollTop,
+        left: rect.left - cr.left + canvas.scrollLeft + rect.width / 2,
+      })
     }
     editor.on('selectionUpdate', report)
     editor.on('transaction', report)
@@ -418,15 +439,103 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     ]
   }
 
+  // 段落悬停：定位当前 hover 的内容块，显示左侧手柄
+  const onCanvasMove = (e) => {
+    const content = wrapRef.current?.querySelector('.editor-content')
+    if (!content || !content.contains(e.target)) {
+      setHoverBlock(null)
+      return
+    }
+    const block = e.target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre')
+    if (!block) {
+      setHoverBlock(null)
+      return
+    }
+    const canvas = e.currentTarget
+    const canvasRect = canvas.getBoundingClientRect()
+    const rect = block.getBoundingClientRect()
+    if (block !== hoverBlockRef.current) {
+      hoverBlockRef.current = block
+      setBlockMenuOpen(false)
+    }
+    setHoverBlock({
+      top: rect.top - canvasRect.top + canvas.scrollTop,
+      left: rect.left - canvasRect.left + canvas.scrollLeft,
+    })
+  }
+
+  // 手柄菜单：设置块级别 / 删除块
+  const handleBlockAction = (level) => {
+    const block = hoverBlockRef.current
+    if (!block || !editor) return
+    const { view } = editor
+    const pos = view.posAtDOM(block, 0)
+    if (pos == null) return
+    if (level === null) {
+      const node = view.state.doc.nodeAt(pos)
+      const size = node ? node.nodeSize : Math.max(block.textContent.length + 2, 2)
+      view.dispatch(view.state.tr.delete(pos, pos + size))
+    } else {
+      const chain = editor.chain().focus()
+      if (level === 0) chain.setNode('paragraph')
+      else chain.setNode('heading', { level })
+      chain.run()
+    }
+    setBlockMenuOpen(false)
+    setHoverBlock(null)
+  }
+
   return (
     <div
       className="canvas"
+      ref={canvasRef}
+      onMouseMove={onCanvasMove}
+      onMouseLeave={() => setHoverBlock(null)}
       onContextMenu={(e) => {
         if (!editor) return
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY })
       }}
     >
+      {/* 段落悬停手柄（飞书式大 T） */}
+      {hoverBlock && !blockMenuOpen && (
+        <div
+          className="para-handle"
+          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 34 }}
+          onMouseEnter={() => setBlockMenuOpen(true)}
+        >
+          <span className="para-handle-t">T</span>
+          <Icon name="dots" size={11} />
+        </div>
+      )}
+      {hoverBlock && blockMenuOpen && (
+        <div
+          className="menu para-handle-menu"
+          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 34 }}
+          onMouseLeave={() => setBlockMenuOpen(false)}
+        >
+          {[['paragraph', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'], ['h4', '标题 4'], ['h5', '标题 5'], ['h6', '标题 6']].map(([v, label]) => {
+            const active = v === 'paragraph'
+              ? !['1', '2', '3', '4', '5', '6'].some((l) => editor?.isActive('heading', { level: Number(l) }))
+              : editor?.isActive('heading', { level: Number(v[1]) })
+            return (
+              <button
+                key={v}
+                className={`menu-item${active ? ' active' : ''}`}
+                onClick={() => handleBlockAction(v === 'paragraph' ? 0 : Number(v[1]))}
+              >
+                <span>{label}</span>
+                {active && <span className="menu-item-check">✓</span>}
+              </button>
+            )
+          })}
+          <div className="menu-sep" />
+          <button className="menu-item danger" onClick={() => handleBlockAction(null)}>
+            <span>删除此块</span>
+          </button>
+        </div>
+      )}
+      <BubbleBar editor={editor} pos={bubblePos} />
       <div className="page-wrap" ref={wrapRef}>
         <EditorContent editor={editor} className={`page${paged ? ' paged' : ''}`} />
         {paged && pageH > 0 && breakStyle === 'dashed' && (

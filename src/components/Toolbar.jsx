@@ -376,7 +376,7 @@ export default function Toolbar({ editor, onAi }) {
       <TB icon="eraser" title="清除格式" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} />
       <div className="divider" />
       <button className="ai-btn" data-tip="AI 改写（调用大模型修改内容）" onClick={onAi}>
-        <Icon name="sparkle" size={15} /> AI
+        <Icon name="sparkle" size={15} />AI
       </button>
     </div>
   )

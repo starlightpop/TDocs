@@ -266,7 +266,7 @@ export default function Sidebar({
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
         <button className="btn btn-primary new-doc-btn" onClick={() => onCreate()}>
-          <Icon name="plus" size={15} /> 新建文档
+          <Icon name="plus" size={15} />新建文档
         </button>
         <div className="sidebar-search-row">
           <div className="search-box">
@@ -296,32 +296,19 @@ export default function Sidebar({
           <>
             {groups.map(renderGroupSection)}
             {ungroupedDocs.length > 0 && (
-              <div className="group-section">
-                {groups.length > 0 && (
-                  <div className="group-header muted" onClick={() => toggleGroup('__ungrouped')}>
-                    <span className={`group-caret${collapsedGroups.has('__ungrouped') ? ' collapsed' : ''}`}>
-                      <Icon name="chevronDown" size={12} />
-                    </span>
-                    <Icon name="doc" size={13} />
-                    <span className="group-name">未分组</span>
-                    <span className="group-count">{ungroupedDocs.length}</span>
-                  </div>
-                )}
-                {(groups.length === 0 || !collapsedGroups.has('__ungrouped')) && (
-                  <div
-                    className="group-docs"
-                    onDragOver={(e) => { e.preventDefault(); setDragOverGroupId('__ungrouped') }}
-                    onDragLeave={() => setDragOverGroupId(null)}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      setDragOverGroupId(null)
-                      const docId = e.dataTransfer.getData('text/tdocs-doc')
-                      if (docId) onMoveDoc(docId, '')
-                    }}
-                  >
-                    {ungroupedDocs.map(renderDocItem)}
-                  </div>
-                )}
+              /* 未分组文档直接平铺，不再用“未分组”组头包裹 */
+              <div
+                className="group-section ungrouped-section"
+                onDragOver={(e) => { e.preventDefault(); setDragOverGroupId('__ungrouped') }}
+                onDragLeave={() => setDragOverGroupId(null)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragOverGroupId(null)
+                  const docId = e.dataTransfer.getData('text/tdocs-doc')
+                  if (docId) onMoveDoc(docId, '')
+                }}
+              >
+                {ungroupedDocs.map(renderDocItem)}
               </div>
             )}
           </>

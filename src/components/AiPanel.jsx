@@ -102,7 +102,7 @@ export default function AiPanel({ editor, selection, onClose }) {
   return (
     <aside className="ai-panel">
       <div className="ai-panel-header">
-        <span><Icon name="sparkle" size={15} /> AI 改写</span>
+        <span><Icon name="sparkle" size={15} />AI 改写</span>
         <button className="icon-btn" onClick={onClose} data-tip="关闭"><Icon name="x" size={15} /></button>
       </div>
 
@@ -181,13 +181,11 @@ export default function AiPanel({ editor, selection, onClose }) {
 
       <div className="ai-scope">
         <label className={scope === 'doc' ? ' on' : ''}>
-          <input type="radio" checked={scope === 'doc'} onChange={() => setScope('doc')} />
-          整篇文档
+          <input type="radio" checked={scope === 'doc'} onChange={() => setScope('doc')} />整篇文档
         </label>
         {selection && (
           <label className={scope === 'selection' ? ' on' : ''}>
-            <input type="radio" checked={scope === 'selection'} onChange={() => setScope('selection')} />
-            仅选中内容
+            <input type="radio" checked={scope === 'selection'} onChange={() => setScope('selection')} />仅选中内容
           </label>
         )}
         <span className="ai-scope-hint">⌘/Ctrl+Enter</span>
