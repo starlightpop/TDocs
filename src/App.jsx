@@ -186,6 +186,29 @@ export default function App() {
     const saved = localStorage.getItem('inkdocs.paper')
     return PAPER[saved] ? saved : 'wide'
   })
+  // 分页模式页面尺寸：WPS 式“适应宽度”——按视口可用宽度放大，保持 A4/B5 比例，四周只留小边距
+  const [pageSize, setPageSize] = useState(() => {
+    const base = PAPER[paper]
+    if (paper === 'wide') return { w: base[1], h: 0 }
+    const avail = (window.innerWidth - 312) || 968  // 减去侧边栏与左右边距，初始估算
+    const w = Math.max(600, Math.min(1200, avail))
+    return { w, h: Math.round((w * base[2]) / base[1]) }
+  })
+  useEffect(() => {
+    const base = PAPER[paper]
+    const calc = () => {
+      if (paper === 'wide') { setPageSize({ w: base[1], h: 0 }); return }
+      const avail = (mainRef.current?.clientWidth || 1040) - 72
+      const w = Math.max(600, Math.min(1200, avail))
+      setPageSize({ w, h: Math.round((w * base[2]) / base[1]) })
+    }
+    calc()
+    const onResize = () => { clearTimeout(timer); timer = setTimeout(calc, 120) }
+    let timer = null
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper])
   // 分页样式：dashed=虚线分页，split=分离页面（WPS 式每页独立）
   const [breakStyle, setBreakStyle] = useState(() => {
     const saved = localStorage.getItem('inkdocs.breakStyle')
@@ -840,7 +863,7 @@ export default function App() {
           onOpenFiles={handleOpenFiles}
         />
 
-        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${pagePad}px` }}>
+        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${pageSize.w}px`, '--page-h': `${pageSize.h}px`, '--page-pad': `${pagePad}px` }}>
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
@@ -902,7 +925,7 @@ export default function App() {
                 onReady={setEditor}
                 onAi={openAi}
                 paged={paper !== 'wide'}
-                pageH={PAPER[paper]?.[2] || 0}
+                pageH={pageSize.h}
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
