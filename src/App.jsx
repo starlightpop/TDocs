@@ -156,6 +156,7 @@ export default function App() {
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showThemeMenu, setShowThemeMenu] = useState(false)
   const [showOutline, setShowOutline] = useState(false)
+  const [rulerOpen, setRulerOpen] = useState(false)
   const [headings, setHeadings] = useState([])
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(-1)
   const [modal, setModal] = useState(null) // {type:'rename'|'delete', doc}
@@ -345,6 +346,14 @@ export default function App() {
     setShowExportMenu(false)
   }
 
+  // 点击外部关闭标尺菜单
+  useEffect(() => {
+    if (!rulerOpen) return
+    const close = () => setRulerOpen(false)
+    setTimeout(() => window.addEventListener('click', close), 0)
+    return () => window.removeEventListener('click', close)
+  }, [rulerOpen])
+
   // 点击外部关闭导出菜单
   useEffect(() => {
     if (!showExportMenu && !showThemeMenu) return
@@ -455,28 +464,10 @@ export default function App() {
             </select>
           )}
 
-          {/* 页边距（左右宽距） */}
-          <select
-            className="tb-select paper-select"
-            value={pagePad}
-            onChange={(e) => setPagePad(e.target.value)}
-            title="页边距"
-          >
-            {Object.entries(PADS).map(([k, [label]]) => (
-              <option key={k} value={k}>{label}边距</option>
-            ))}
-          </select>
+          {/* 页边距（左右宽距）——已迁移到正文上方标尺，点击标尺弹出阈值切换 */}
 
-          {/* 大纲面板开关 */}
-          {activeDoc && (
-            <button
-              className={`icon-btn${showOutline ? ' active' : ''}`}
-              data-tip="文档大纲"
-              onClick={() => setShowOutline(!showOutline)}
-            >
-              <Icon name="outline" />
-            </button>
-          )}
+          {/* 大纲面板开关（状态栏已有同功能入口，顶栏不再重复） */}
+
 
           {activeDoc && (
             <div className="menu-wrap">
@@ -581,6 +572,34 @@ export default function App() {
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
+              {/* 边距标尺：点击弹出预设阈值（窄/常规/宽），三角标记当前档位 */}
+              <div
+                className="ruler"
+                title="点击调整页边距"
+                onClick={(e) => { e.stopPropagation(); setRulerOpen(!rulerOpen) }}
+              >
+                <div className="ruler-line" />
+                <div
+                  className="ruler-mark"
+                  style={{
+                    left: `${((PADS[pagePad][1] - 40) / (104 - 40)) * 100}%`,
+                  }}
+                />
+                {rulerOpen && (
+                  <div className="menu ruler-menu" onClick={(e) => e.stopPropagation()}>
+                    {Object.entries(PADS).map(([k, [label]]) => (
+                      <button
+                        key={k}
+                        className={`menu-item${pagePad === k ? ' active' : ''}`}
+                        onClick={() => { setPagePad(k); setRulerOpen(false) }}
+                      >
+                        <span>{label}边距</span>
+                        {pagePad === k && <span className="menu-item-check">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* key 保证切换文档时编辑器重新初始化 */}
               <Editor
                 key={activeDoc.id}
