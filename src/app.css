@@ -575,10 +575,15 @@ html.platform-mac .topbar .menu {
   max-width: 64px;
 }
 .font-menu {
-  min-width: 150px;
+  min-width: 104px;  /* 与按钮宽度接近，不过宽 */
+  width: max-content;
 }
 .font-menu .menu-item {
   font-size: 13px;
+}
+.font-menu .settings-label {
+  padding: 6px 10px 2px;
+  font-size: 10.5px;
 }
 
 .tb-block-btn {
@@ -705,6 +710,7 @@ html.platform-mac .topbar .menu {
 .canvas {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;  /* 窗口窄时页面保持原尺寸，横向滚动查看 */
   padding: 28px 24px 24px;
 }
 
@@ -714,8 +720,8 @@ html.platform-mac .topbar .menu {
 }
 
 .page {
-  max-width: var(--page-width, 880px);
-  width: 100%;
+  width: var(--page-width, 880px);  /* 固定页面宽度：窗口缩小不压缩正文，改为滚动 */
+  max-width: none;
   /* 无限页面：底部预留超过一屏的空白，末尾标题也能滚到视口顶部 */
   min-height: calc(100vh - 150px);
   margin: 0 auto;

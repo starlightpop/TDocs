@@ -11,7 +11,7 @@ import {
   loadTheme, saveTheme, stripHtml,
   loadGroups, saveGroups, createGroup,
 } from './lib/storage.js'
-import { exportHtml, exportMarkdown, exportText } from './lib/exporter.js'
+import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 
 const WELCOME_HTML = `
@@ -462,6 +462,8 @@ export default function App() {
     if (kind === 'html') exportHtml(title, activeDoc.content)
     else if (kind === 'md') exportMarkdown(title, activeDoc.content)
     else if (kind === 'txt') exportText(title, stripHtml(activeDoc.content))
+    else if (kind === 'docx') await exportDocx(title, activeDoc.content)
+    else if (kind === 'epub') await exportEpub(title, activeDoc.content)
     else if (kind === 'pdf') {
       if (window.tdocs?.exportPdf) {
         try {
@@ -700,6 +702,12 @@ export default function App() {
                 <div className="menu" onClick={(e) => e.stopPropagation()}>
                   <button className="menu-item" onClick={() => doExport('pdf')}>
                     <Icon name="download" size={15} /> PDF (.pdf)
+                  </button>
+                  <button className="menu-item" onClick={() => doExport('docx')}>
+                    <Icon name="doc" size={15} /> Word (.docx)
+                  </button>
+                  <button className="menu-item" onClick={() => doExport('epub')}>
+                    <Icon name="doc" size={15} /> EPUB (.epub)
                   </button>
                   <button className="menu-item" onClick={() => doExport('md')}>
                     <Icon name="doc" size={15} /> Markdown (.md)

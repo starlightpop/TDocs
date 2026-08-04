@@ -18,6 +18,25 @@ const BLOCK_OPTIONS = [
   ['blockquote', '引用'],
   ['codeBlock', '代码块'],
 ]
+// 中文字号（参考 Word/WPS）：名称 → 像素值
+const CN_SIZES = [
+  ['初号', 42], ['小初', 36], ['一号', 26], ['小一', 24], ['二号', 22], ['小二', 18],
+  ['三号', 16], ['小三', 15], ['四号', 14], ['小四', 12], ['五号', 10.5], ['小五', 9],
+]
+const PX_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48]
+const FONT_FAMILIES = [
+  ['', '默认'],
+  ["'Songti SC', 'SimSun', serif", '宋体'],
+  ["'STHeiti', 'Heiti SC', 'SimHei', sans-serif", '黑体'],
+  ["'Kaiti SC', 'KaiTi', serif", '楷体'],
+  ["'STFangsong', 'FangSong', serif", '仿宋'],
+  ["'PingFang SC', 'Microsoft YaHei', sans-serif", '苹方'],
+  ["'Baoli SC', 'LiSu', serif", '隶书'],
+  ["'Xingkai SC', 'STXingkai', cursive", '行楷'],
+  ["'Yuanti SC', 'YouYuan', sans-serif", '圆体'],
+  ["'Georgia', 'Times New Roman', serif", '衬线'],
+  ["'Menlo', 'Consolas', monospace", '等宽'],
+]
 const HIGHLIGHT_COLORS = [
   '#ffe58a', '#ffd3a3', '#ffb3b5', '#ffc9e2', '#d5b8ff', '#b8d4ff',
   '#a8e6d2', '#d3f2b6', '#fff3bf', '#c3fae8', '#d0ebff', '#e7e9ee',
@@ -151,7 +170,12 @@ export default function Toolbar({ editor, onAi }) {
           title="字号"
           onClick={() => { setShowFontSize(!showFontSize); setShowFontFamily(false); setShowBlockMenu(false); setShowTextColor(false); setShowHighlight(false) }}
         >
-          {editor.getAttributes('textStyle').fontSize ? Number.parseFloat(editor.getAttributes('textStyle').fontSize) : '字号'}
+          {(() => {
+            const cur = Number.parseFloat(editor.getAttributes('textStyle').fontSize || '')
+            if (!cur) return '字号'
+            const cn = CN_SIZES.find(([, v]) => Math.abs(v - cur) < 0.01)
+            return cn ? cn[0] : (Number.isInteger(cur) ? cur : cur.toFixed(1))
+          })()}
           <Icon name="chevronDown" size={12} />
         </button>
         {showFontSize && (
@@ -163,16 +187,31 @@ export default function Toolbar({ editor, onAi }) {
               <span>默认</span>
               {!editor.getAttributes('textStyle').fontSize && <span className="menu-item-check">✓</span>}
             </button>
-            {['12', '14', '16', '18', '20', '24', '28', '32'].map((s) => {
-              const cur = editor.getAttributes('textStyle').fontSize
+            <div className="settings-label">中文字号</div>
+            {CN_SIZES.map(([label, v]) => {
+              const cur = Number.parseFloat(editor.getAttributes('textStyle').fontSize || '')
               return (
                 <button
-                  key={s}
-                  className={`menu-item${cur === `${s}px` ? ' active' : ''}`}
-                  onClick={() => { editor.chain().focus().setMark('textStyle', { fontSize: `${s}px` }).run(); setShowFontSize(false) }}
+                  key={label}
+                  className={`menu-item${Math.abs(cur - v) < 0.01 ? ' active' : ''}`}
+                  onClick={() => { editor.chain().focus().setMark('textStyle', { fontSize: `${v}px` }).run(); setShowFontSize(false) }}
                 >
-                  <span>{s}</span>
-                  {cur === `${s}px` && <span className="menu-item-check">✓</span>}
+                  <span>{label}</span>
+                  {Math.abs(cur - v) < 0.01 && <span className="menu-item-check">✓</span>}
+                </button>
+              )
+            })}
+            <div className="settings-label">像素</div>
+            {PX_SIZES.map((v) => {
+              const cur = Number.parseFloat(editor.getAttributes('textStyle').fontSize || '')
+              return (
+                <button
+                  key={v}
+                  className={`menu-item${Math.abs(cur - v) < 0.01 ? ' active' : ''}`}
+                  onClick={() => { editor.chain().focus().setMark('textStyle', { fontSize: `${v}px` }).run(); setShowFontSize(false) }}
+                >
+                  <span>{v}px</span>
+                  {Math.abs(cur - v) < 0.01 && <span className="menu-item-check">✓</span>}
                 </button>
               )
             })}
@@ -187,25 +226,14 @@ export default function Toolbar({ editor, onAi }) {
         >
           {(() => {
             const fam = editor.getAttributes('textStyle').fontFamily || ''
-            if (!fam) return '字体'
-            if (fam.includes('Songti') || fam.includes('SimSun')) return '宋体'
-            if (fam.includes('Kaiti') || fam.includes('KaiTi')) return '楷体'
-            if (fam.includes('FangSong') || fam.includes('Fangsong')) return '仿宋'
-            if (fam.includes('Georgia')) return '衬线'
-            return '黑体'
+            const hit = FONT_FAMILIES.find(([v]) => v === fam)
+            return hit ? hit[1] : '字体'
           })()}
           <Icon name="chevronDown" size={12} />
         </button>
         {showFontFamily && (
           <div className="menu font-menu" onClick={(e) => e.stopPropagation()}>
-            {[
-              ['', '默认'],
-              ["serif, 'Songti SC', 'SimSun'", '宋体'],
-              ["sans-serif, 'PingFang SC', 'Microsoft YaHei'", '黑体'],
-              ["'Kaiti SC', 'KaiTi', serif", '楷体'],
-              ["'STFangsong', 'FangSong', serif", '仿宋'],
-              ["'Georgia', 'Times New Roman', serif", '衬线'],
-            ].map(([v, label]) => {
+            {FONT_FAMILIES.map(([v, label]) => {
               const cur = editor.getAttributes('textStyle').fontFamily || ''
               return (
                 <button

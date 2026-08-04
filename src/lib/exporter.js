@@ -1,7 +1,11 @@
-// 导出工具：HTML → Markdown / HTML 文件 / 纯文本
+// 导出工具：HTML → Markdown / HTML 文件 / 纯文本 / PDF / DOCX / EPUB
 
 export function downloadFile(filename, content, mime) {
   const blob = new Blob([content], { type: mime })
+  downloadBlob(filename, blob)
+}
+
+export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -46,7 +50,149 @@ export function exportMarkdown(title, html) {
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+// ---------- DOCX 导出（docx 库，按需加载） ----------
+function htmlToDocxChildren(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html')
+  const out = []
+  const { Paragraph, TextRun, HeadingLevel } = DOCX_MOD
+  const inlineRuns = (el) => {
+    const runs = []
+    const pushText = (text, base = {}) => {
+      if (!text) return
+      runs.push(new TextRun({ text, ...base }))
+    }
+    const walk = (node) => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) { pushText(child.textContent); continue }
+        if (child.nodeType !== Node.ELEMENT_NODE) continue
+        const tag = child.tagName.toLowerCase()
+        const base = {
+          bold: tag === 'strong' || tag === 'b',
+          italics: tag === 'em' || tag === 'i',
+          underline: tag === 'u' || tag === 'ins' ? {} : undefined,
+          strike: tag === 's' || tag === 'del' ? true : undefined,
+          highlight: tag === 'mark' ? 'yellow' : undefined,
+          font: tag === 'code' ? 'Courier New' : undefined,
+        }
+        // 叶子元素：收集其文本为一段 run
+        if (['strong', 'b', 'em', 'i', 'u', 'ins', 's', 'del', 'mark', 'code', 'a', 'span'].includes(tag)) {
+          pushText(child.textContent, Object.fromEntries(Object.entries(base).filter(([, v]) => v !== undefined)))
+        } else {
+          walk(child)
+        }
+      }
+    }
+    walk(el)
+    return runs.length ? runs : [new TextRun({ text: '' })]
+  }
+  for (const el of doc.body.children) {
+    const tag = el.tagName.toLowerCase()
+    const text = el.textContent || ''
+    if (tag.match(/^h[1-6]$/)) {
+      out.push(new Paragraph({ children: inlineRuns(el), heading: HeadingLevel[`HEADING_${Math.min(Number(tag[1]), 6)}`], spacing: { before: 240, after: 160 } }))
+    } else if (tag === 'p' || tag === 'div') {
+      out.push(new Paragraph({ children: inlineRuns(el), spacing: { after: 160 } }))
+    } else if (tag === 'blockquote') {
+      out.push(new Paragraph({ children: inlineRuns(el), indent: { left: 420 }, spacing: { after: 160 } }))
+    } else if (tag === 'ul' || tag === 'ol') {
+      Array.from(el.children).forEach((li) => {
+        out.push(new Paragraph({ children: inlineRuns(li), bullet: tag === 'ul' ? { level: 0 } : undefined, numbering: tag === 'ol' ? { reference: 'ol', level: 0 } : undefined, spacing: { after: 80 } }))
+      })
+    } else if (tag === 'pre') {
+      out.push(new Paragraph({ children: [new TextRun({ text: el.textContent, font: 'Courier New' })], spacing: { before: 160, after: 160 } }))
+    } else if (tag === 'table') {
+      Array.from(el.querySelectorAll('tr')).forEach((tr) => {
+        out.push(new Paragraph({ children: [new TextRun({ text: Array.from(tr.children).map((c) => c.textContent.trim()).join(' | ') })], spacing: { after: 80 } }))
+      })
+    } else if (tag === 'hr') {
+      out.push(new Paragraph({ children: [new TextRun({ text: '— — — — — — — —' })], spacing: { after: 160 } }))
+    } else if (tag === 'img') {
+      out.push(new Paragraph({ children: [new TextRun({ text: `[图片：${el.getAttribute('alt') || '未命名'}]` })], spacing: { after: 160 } }))
+    }
+  }
+  return out
+}
+
+let DOCX_MOD = null
+let DOCX_LOADING = null
+function loadDocx() {
+  if (!DOCX_LOADING) DOCX_LOADING = import('docx').then((m) => { DOCX_MOD = m; return m })
+  return DOCX_LOADING
+}
+
+export async function exportDocx(title, html) {
+  const { Document, Packer } = await loadDocx()
+  const children = htmlToDocxChildren(html)
+  if (!children.length) children.push(new DOCX_MOD.Paragraph({ children: [new DOCX_MOD.TextRun({ text: '' })] }))
+  const doc = new Document({
+    numbering: { config: [{ reference: 'ol', levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: 'start' }] }] },
+    styles: { default: { document: { run: { font: 'PingFang SC', size: 24 } } } }, // 12pt
+    sections: [{ children }],
+  })
+  const blob = await Packer.toBlob(doc)
+  downloadBlob(`${title || '未命名'}.docx`, blob)
+}
+
+// ---------- EPUB 导出（jszip 手写 epub3 结构） ----------
+let JSZIP_MOD = null
+let JSZIP_LOADING = null
+function loadJSZip() {
+  if (!JSZIP_LOADING) JSZIP_LOADING = import('jszip').then((m) => { JSZIP_MOD = m.default || m; return JSZIP_MOD })
+  return JSZIP_LOADING
+}
+
+function htmlToXhtmlBody(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html')
+  const body = doc.body
+  // 序列化为 XHTML（void 元素自闭合）
+  return new XMLSerializer().serializeToString(body).replace(/^<body[^>]*>/, '').replace(/<\/body>$/, '')
+}
+
+export async function exportEpub(title, html) {
+  const JSZip = await loadJSZip()
+  const safeTitle = String(title || '未命名')
+  const body = htmlToXhtmlBody(html)
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' })
+  zip.folder('META-INF').file('container.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>`)
+  const oebps = zip.folder('OEBPS')
+  const uid = 'tdocs-' + Date.now().toString(36)
+  oebps.file('content.opf', `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">${uid}</dc:identifier>
+    <dc:title>${escapeHtml(safeTitle)}</dc:title>
+    <dc:language>zh-CN</dc:language>
+    <meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="content" href="content.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="content"/></spine>
+</package>`)
+  oebps.file('nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="zh-CN">
+<head><meta charset="utf-8"/><title>${escapeHtml(safeTitle)}</title></head>
+<body><nav epub:type="toc"><h1>目录</h1><ol><li><a href="content.xhtml">${escapeHtml(safeTitle)}</a></li></ol></nav></body>
+</html>`)
+  oebps.file('content.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="zh-CN" lang="zh-CN">
+<head><meta charset="utf-8"/><title>${escapeHtml(safeTitle)}</title>
+<style>body{font-family:serif;line-height:1.8;margin:5% 6%}h1,h2,h3{line-height:1.4}img{max-width:100%}</style>
+</head>
+<body><h1>${escapeHtml(safeTitle)}</h1>${body}</body>
+</html>`)
+  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' })
+  downloadBlob(`${safeTitle}.epub`, blob)
 }
 
 function nodesToMd(parent, ctx = {}) {

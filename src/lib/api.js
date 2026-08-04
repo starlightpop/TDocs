@@ -11,11 +11,11 @@ export function loadApiConfig() {
         provider: cfg.provider || 'custom',
         baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
         apiKey: cfg.apiKey || '',
-        model: cfg.model || 'gpt-5.5',
+        model: cfg.model || 'gpt-5.6',
       }
     }
   } catch { /* ignore */ }
-  return { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-5.5' }
+  return { provider: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-5.6' }
 }
 
 export function saveApiConfig(cfg) {
