@@ -142,15 +142,15 @@ export default function Toolbar({ editor, onAi }) {
       try {
         const ret = new Function(codeText)()
         const text = [...logs, ret !== undefined ? String(ret) : ''].filter(Boolean).join('\n')
-        setRunOutput({ text: text || '（无输出）', ok: true, ...pos })
+        setRunOutput({ text: text || '（无输出）', ok: true, cmd: codeText.trim() || '（空代码）', ...pos })
       } catch (e) {
-        setRunOutput({ text: String(e?.message || e), ok: false, ...pos })
+        setRunOutput({ text: String(e?.message || e), ok: false, cmd: codeText.trim() || '（空代码）', ...pos })
       } finally {
         console.log = origLog
         window.print = origPrint
       }
     } else {
-      setRunOutput({ text: `当前版本暂不支持运行 ${lang}，请选择「JavaScript」或「纯文本」测试`, ok: false, ...pos })
+      setRunOutput({ text: `当前版本暂不支持运行 ${lang}，请选择「JavaScript」或「纯文本」测试`, ok: false, cmd: `run ${lang}`, ...pos })
     }
   }
 
@@ -458,12 +458,16 @@ export default function Toolbar({ editor, onAi }) {
         </>
       )}
       {runOutput && (
-        <div className="code-run-output" style={{ top: runOutput.top, left: runOutput.left }}>
-          <div className={`code-run-label${runOutput.ok ? '' : ' fail'}`}>
-            {runOutput.ok ? '运行输出' : '运行失败'}
+        <div className="code-terminal" style={{ top: runOutput.top, left: runOutput.left }}>
+          <div className="code-terminal-head">
+            <span className="code-terminal-dots"><i /><i /><i /></span>
+            <span className="code-terminal-title">代码运行</span>
             <button className="icon-btn" title="关闭" onClick={() => setRunOutput(null)}><Icon name="x" size={12} /></button>
           </div>
-          <pre>{runOutput.text}</pre>
+          <div className="code-terminal-body">
+            <pre className="term-cmd"><span className="term-prompt">$</span> {runOutput.cmd}</pre>
+            <pre className={`term-out${runOutput.ok ? '' : ' err'}`}>{runOutput.text}</pre>
+          </div>
         </div>
       )}
       <div className="divider" />
