@@ -77,7 +77,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed' }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total' }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -404,7 +404,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
                   width: pageMetaRef.current.width,
                 }}
               >
-                <span className="page-break-label">第 {k + 2} 页</span>
+                <span className="page-break-label">
+                  {pageLabelStyle === 'total'
+                    ? `第 ${k + 2} 页 / 共 ${breakOffsets.length + 1} 页`
+                    : `第 ${k + 2} 页`}
+                </span>
               </div>
             ))}
           </div>
@@ -422,7 +426,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
                   width: pageMetaRef.current.width,
                 }}
               >
-                <span className="page-gap-label">第 {k + 1} 页 / 第 {k + 2} 页</span>
+                <span className="page-gap-label">
+                  {pageLabelStyle === 'total'
+                    ? `第 ${k + 1} 页 / 共 ${breakOffsets.length + 1} 页`
+                    : `第 ${k + 1} 页 / 第 ${k + 2} 页`}
+                </span>
               </div>
             ))}
           </div>

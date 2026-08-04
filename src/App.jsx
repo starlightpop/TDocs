@@ -120,6 +120,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('inkdocs.breakStyle', breakStyle)
   }, [breakStyle])
+  // 页码标签样式：pair=第 1 页 / 第 2 页（上下页），total=第 1 页 / 共 12 页（当前页/总页数）
+  const [pageLabelStyle, setPageLabelStyle] = useState(() => {
+    const saved = localStorage.getItem('inkdocs.pageLabelStyle')
+    return saved === 'pair' ? 'pair' : 'total'
+  })
+  useEffect(() => {
+    localStorage.setItem('inkdocs.pageLabelStyle', pageLabelStyle)
+  }, [pageLabelStyle])
 
   // ---------- 页边距（左右宽距） ----------
   const PADS = { narrow: ['窄', 40], normal: ['常规', 72], wide: ['宽', 104] }
@@ -434,6 +442,19 @@ export default function App() {
             </select>
           )}
 
+          {/* 页码标签样式（仅分页模式，与分页样式相邻） */}
+          {paper !== 'wide' && (
+            <select
+              className="tb-select paper-select"
+              value={pageLabelStyle}
+              onChange={(e) => setPageLabelStyle(e.target.value)}
+              title="页码标签：上下页，或当前页/总页数"
+            >
+              <option value="total">当前页/总页数</option>
+              <option value="pair">上页/下页</option>
+            </select>
+          )}
+
           {/* 页边距（左右宽距） */}
           <select
             className="tb-select paper-select"
@@ -572,6 +593,7 @@ export default function App() {
                 paged={paper !== 'wide'}
                 pageH={PAPER[paper]?.[2] || 0}
                 breakStyle={breakStyle}
+                pageLabelStyle={pageLabelStyle}
               />
               <div className="statusbar">
                 <span>{stats.words} 词</span>
