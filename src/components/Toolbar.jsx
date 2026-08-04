@@ -80,6 +80,7 @@ export default function Toolbar({ editor, onAi }) {
   const [showFontSize, setShowFontSize] = useState(false)
   const [showFontFamily, setShowFontFamily] = useState(false)
   const [showLangMenu, setShowLangMenu] = useState(false)
+  const [runOutput, setRunOutput] = useState(null) // {text, ok, top, left}
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
 
@@ -119,6 +120,34 @@ export default function Toolbar({ editor, onAi }) {
     const url = window.prompt('输入链接地址', 'https://')
     if (url && url !== 'https://') {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }
+  }
+
+  // 运行代码块（JavaScript/纯文本可执行，其余语言提示）
+  const runCode = () => {
+    if (!editor?.isActive('codeBlock')) return
+    const lang = editor.getAttributes('codeBlock').language || 'plaintext'
+    const { from } = editor.state.selection
+    const node = editor.state.doc.resolve(from).parent
+    const codeText = node.type.name === 'codeBlock' ? node.textContent : ''
+    const el = editor.view.dom.querySelector('.editor-content pre')
+    const rect = el?.getBoundingClientRect()
+    const pos = rect ? { top: rect.bottom + 10, left: rect.left } : { top: 120, left: 200 }
+    if (lang === 'javascript' || lang === 'plaintext') {
+      const logs = []
+      const origLog = console.log
+      console.log = (...a) => logs.push(a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' '))
+      try {
+        const ret = new Function(codeText)()
+        const text = [...logs, ret !== undefined ? String(ret) : ''].filter(Boolean).join('\n')
+        setRunOutput({ text: text || '（无输出）', ok: true, ...pos })
+      } catch (e) {
+        setRunOutput({ text: String(e?.message || e), ok: false, ...pos })
+      } finally {
+        console.log = origLog
+      }
+    } else {
+      setRunOutput({ text: `当前版本暂不支持运行 ${lang}，请选择「JavaScript」或「纯文本」测试`, ok: false, ...pos })
     }
   }
 
@@ -395,9 +424,11 @@ export default function Toolbar({ editor, onAi }) {
           <TB icon="trash" title="删除表格" onClick={() => editor.chain().focus().deleteTable().run()} />
         </>
       )}
-      {/* 代码块语言选择（代码块激活时显示） */}
+      {/* 代码块语言选择 + 运行（代码块激活时显示） */}
       {editor.isActive('codeBlock') && (
-        <div className="menu-wrap">
+        <>
+          <button className="tb-sup-sub tb-run-btn" title="运行代码（JavaScript/纯文本）" onClick={runCode}>▶</button>
+          <div className="menu-wrap">
           <button
             className="tb-block-btn tb-lang-btn"
             title="代码语言（决定语法高亮）"
@@ -420,6 +451,16 @@ export default function Toolbar({ editor, onAi }) {
               ))}
             </div>
           )}
+          </div>
+        </>
+      )}
+      {runOutput && (
+        <div className="code-run-output" style={{ top: runOutput.top, left: runOutput.left }}>
+          <div className={`code-run-label${runOutput.ok ? '' : ' fail'}`}>
+            {runOutput.ok ? '运行输出' : '运行失败'}
+            <button className="icon-btn" title="关闭" onClick={() => setRunOutput(null)}><Icon name="x" size={12} /></button>
+          </div>
+          <pre>{runOutput.text}</pre>
         </div>
       )}
       <div className="divider" />

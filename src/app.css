@@ -138,25 +138,26 @@ html.platform-mac .topbar .menu {
 .ruler-grip-l,
 .ruler-grip-r {
   position: absolute;
-  top: 1px;
-  width: 7px;
-  height: 20px;
-  background: var(--accent);
-  border-radius: 2px;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 9px solid var(--accent);
   cursor: ew-resize;
   z-index: 2;
+  transition: filter 0.12s;
 }
 .ruler-grip-l {
-  /* 外侧对齐：手柄整体在左侧灰边区，右缘压住边界线 */
-  transform: translateX(-100%);
+  /* 倒三角：尖尖对准文字外围（灰白边界） */
+  transform: translateX(-50%);
 }
 .ruler-grip-r {
-  /* 外侧对齐：手柄整体在右侧灰边区，左缘压住边界线 */
-  transform: translateX(100%);
+  transform: translateX(-50%);
 }
 .ruler-grip-l:hover,
 .ruler-grip-r:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.18);
 }
 .ruler-menu {
   top: calc(100% + 4px);
@@ -875,14 +876,15 @@ html.platform-mac .topbar .menu {
 
 /* 分页模式（A4/B5）：Word 式分页显示 */
 .page.paged {
-  /* WPS 式页边距：上下统一，首页顶部也不突出 */
+  /* WPS 式页边距：上下统一 96px，首页与后续页一致 */
   padding-top: 96px;
-  padding-bottom: calc(var(--page-h, 1123px) * 0.7);
+  padding-bottom: 96px;
 }
 /* 分离页面留白：由 ProseMirror Decoration 类名驱动；
    用 padding 而非 margin，避免相邻外边距合并导致留白减半 */
 .editor-content .page-pad-bottom {
-  padding-bottom: 96px !important;
+  /* 默认下留白；分页计算会以 inline style 动态覆盖（撑满整页） */
+  padding-bottom: 96px;
 }
 .editor-content .page-pad-top {
   padding-top: 96px !important;
@@ -2444,4 +2446,54 @@ html.platform-mac .topbar .menu {
 }
 .lang-menu {
   min-width: 120px;
+}
+
+/* ---------- 代码块运行输出 ---------- */
+.code-run-output {
+  position: fixed;
+  z-index: 500;
+  min-width: 260px;
+  max-width: 480px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+.code-run-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+  border-bottom: 1px solid var(--border);
+  background: rgba(47, 158, 110, 0.08);
+}
+.code-run-label.fail {
+  color: var(--danger);
+  background: rgba(229, 72, 77, 0.08);
+}
+.code-run-label .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+.code-run-output pre {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.tb-run-btn {
+  color: var(--success);
+}
+.tb-run-btn:hover {
+  background: rgba(47, 158, 110, 0.12);
+  color: var(--success);
 }

@@ -207,8 +207,14 @@ const PagePadExtension = Extension.create({
               if (!meta.pairs?.length) return DecorationSet.empty
               const decos = []
               for (const p of meta.pairs) {
-                decos.push(Decoration.node(p.prevFrom, p.prevTo, { class: 'page-pad-bottom' }))
-                decos.push(Decoration.node(p.nextFrom, p.nextTo, { class: 'page-pad-top' }))
+                // prev 块底部留白 = 动态计算（撑满整页）；next 块顶部固定留白
+                decos.push(Decoration.node(p.prevFrom, p.prevTo, {
+                  class: 'page-pad-bottom',
+                  style: p.prevPad != null ? `padding-bottom: ${p.prevPad}px` : '',
+                }))
+                if (p.nextFrom != null) {
+                  decos.push(Decoration.node(p.nextFrom, p.nextTo, { class: 'page-pad-top' }))
+                }
               }
               return DecorationSet.create(tr.doc, decos)
             }
@@ -231,6 +237,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const [breakOffsets, setBreakOffsets] = useState([])
   const wrapRef = useRef(null)
   const pageMetaRef = useRef({ top: 64, left: 0, width: 0 })
+  const lastPagePads = useRef([])
+  const lastTailPad = useRef(null)
   // 选中文字浮动条位置
   const [bubblePos, setBubblePos] = useState(null)
   const canvasRef = useRef(null)
@@ -474,6 +482,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           let pageTopEdge = refTop - padTop
           let areaEnd = pageTopEdge + pageH - PAGE_PAD
           let i = 0
+          const pagePads = []
           while (i < blocks.length - 1) {
             let best = -1
             while (i < blocks.length - 1 && bottomOf(blocks[i]) <= areaEnd + 1) {
@@ -492,10 +501,19 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
             const prevTextBottom = bottomOf(blocks[best]) - prevPadBottom
             const boundary = prevTextBottom + PAGE_PAD + prevMargin / 2
             offsets.push(boundary - refTop)
+            // 本页内容占用（含顶部留白），底部留白 = 页高 - 占用，保证每页等高且上下对称
+            const occupy = prevTextBottom - pageTopEdge
+            pagePads.push(Math.max(PAGE_PAD, Math.round(pageH - occupy)))
             // 下一页从边界开始，内容可用到 边界 + 页高 - 下留白
             pageTopEdge = boundary
             areaEnd = pageTopEdge + pageH - PAGE_PAD
           }
+          lastPagePads.current = pagePads
+          // 尾页：最后一块补足到整页高度
+          const lastIdx = blocks.length - 1
+          const lastPadB = parseFloat(getComputedStyle(blocks[lastIdx]).paddingBottom) || 0
+          const lastTextBottom = bottomOf(blocks[lastIdx]) - lastPadB
+          lastTailPad.current = Math.max(PAGE_PAD, Math.round(pageH - (lastTextBottom - pageTopEdge)))
         }
       } else {
         offsets = computeBreaks(content)
@@ -508,12 +526,18 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         })
         const pairs = breakIndices
           .filter(([a, b]) => topRanges[a] && topRanges[b])
-          .map(([a, b]) => ({
+          .map(([a, b], idx) => ({
             prevFrom: topRanges[a].from,
             prevTo: topRanges[a].to,
+            prevPad: lastPagePads.current[idx],
             nextFrom: topRanges[b].from,
             nextTo: topRanges[b].to,
           }))
+        // 尾页：最后一块补足到整页高度（上下留白对称）
+        const lastBlock = topRanges[topRanges.length - 1]
+        if (lastBlock && lastTailPad.current != null) {
+          pairs.push({ prevFrom: lastBlock.from, prevTo: lastBlock.to, prevPad: lastTailPad.current, nextFrom: null, nextTo: null })
+        }
         const sig = JSON.stringify(pairs)
         if (sig !== lastPairsRef.current) {
           lastPairsRef.current = sig
@@ -596,8 +620,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         const res = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
         if (res?.pos != null) {
           const node = editor.state.doc.nodeAt(res.pos)
-          // 落在代码块内且点在内容区外：失焦退出编辑
-          if (node?.type.name === 'codeBlock') {
+          // 落在代码块/引用内且点在内容区外：失焦退出编辑
+          if (node && (node.type.name === 'codeBlock' || node.type.name === 'blockquote')) {
             editor.commands.blur()
             return
           }
