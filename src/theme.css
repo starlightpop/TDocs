@@ -1,0 +1,184 @@
+/* ============================================================
+   InkDocs 主题系统
+   通过 CSS 变量实现浅色 / 深色双主题，支持跟随系统 + 手动切换
+   ============================================================ */
+
+:root {
+  /* 浅色模式（默认） */
+  --bg: #f5f6f8;
+  --bg-canvas: #e9ebef;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e7eaf0;
+
+  --text: #1c1e21;
+  --text-2: #4b5563;
+  --text-3: #8a919c;
+
+  --border: #dde1e8;
+  --border-strong: #c9cfd9;
+
+  --accent: #4f6ef7;
+  --accent-hover: #3f5ce0;
+  --accent-soft: rgba(79, 110, 247, 0.12);
+  --accent-text: #ffffff;
+
+  --danger: #e5484d;
+  --success: #2f9e6e;
+  --warn: #e0a428;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.14);
+
+  --page-bg: #ffffff;
+  --page-shadow: 0 1px 3px rgba(16, 24, 40, 0.1), 0 4px 16px rgba(16, 24, 40, 0.06);
+
+  --selection: rgba(79, 110, 247, 0.2);
+  --scrollbar-thumb: #c4cad4;
+  --scrollbar-track: transparent;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: Georgia, "Songti SC", "SimSun", serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #0e1013;
+  --bg-canvas: #0a0c0f;
+  --surface: #16191f;
+  --surface-2: #1d2129;
+  --surface-3: #242933;
+
+  --text: #e6e8ec;
+  --text-2: #a7adba;
+  --text-3: #6b7280;
+
+  --border: #2a2f3a;
+  --border-strong: #383f4d;
+
+  --accent: #6d8aff;
+  --accent-hover: #85a0ff;
+  --accent-soft: rgba(109, 138, 255, 0.16);
+  --accent-text: #0e1013;
+
+  --danger: #f16063;
+  --success: #3dbb84;
+  --warn: #eab54d;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  --page-bg: #16191f;
+  --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --selection: rgba(109, 138, 255, 0.3);
+  --scrollbar-thumb: #3a4050;
+  --scrollbar-track: transparent;
+
+  color-scheme: dark;
+}
+
+/* ---------- 主题色（深浅模式下各自适配） ---------- */
+[data-accent='purple'] {
+  --accent: #8b5cf6;
+  --accent-hover: #7c4ee0;
+  --accent-soft: rgba(139, 92, 246, 0.13);
+  --selection: rgba(139, 92, 246, 0.22);
+}
+[data-theme='dark'][data-accent='purple'] {
+  --accent: #a78bfa;
+  --accent-hover: #bda4fc;
+  --accent-soft: rgba(167, 139, 250, 0.16);
+  --selection: rgba(167, 139, 250, 0.3);
+}
+[data-accent='green'] {
+  --accent: #10b981;
+  --accent-hover: #0da271;
+  --accent-soft: rgba(16, 185, 129, 0.13);
+  --selection: rgba(16, 185, 129, 0.22);
+}
+[data-theme='dark'][data-accent='green'] {
+  --accent: #34d399;
+  --accent-hover: #4fddab;
+  --accent-soft: rgba(52, 211, 153, 0.16);
+  --selection: rgba(52, 211, 153, 0.3);
+}
+[data-accent='orange'] {
+  --accent: #f59e0b;
+  --accent-hover: #dd8d06;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --selection: rgba(245, 158, 11, 0.22);
+}
+[data-theme='dark'][data-accent='orange'] {
+  --accent: #fbbf24;
+  --accent-hover: #fccd4d;
+  --accent-soft: rgba(251, 191, 36, 0.16);
+  --selection: rgba(251, 191, 36, 0.3);
+}
+[data-accent='pink'] {
+  --accent: #ec4899;
+  --accent-hover: #d63d8a;
+  --accent-soft: rgba(236, 72, 153, 0.13);
+  --selection: rgba(236, 72, 153, 0.22);
+}
+[data-theme='dark'][data-accent='pink'] {
+  --accent: #f472b6;
+  --accent-hover: #f78cc4;
+  --accent-soft: rgba(244, 114, 182, 0.16);
+  --selection: rgba(244, 114, 182, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
