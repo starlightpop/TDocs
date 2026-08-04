@@ -869,6 +869,7 @@ html.platform-mac .topbar .menu {
   min-height: calc(100vh - 150px);
   margin: 0 auto;
   background: var(--page-bg);
+  border: 1px solid var(--border);  /* 纸张轮廓：深色主题下也能看清 A4 边界 */
   border-radius: 4px;
   box-shadow: var(--page-shadow);
   padding: 64px var(--page-pad, 72px) calc(100vh - 120px);
@@ -1251,9 +1252,11 @@ html.platform-mac .topbar .menu {
   background: var(--surface-2);
 }
 .zoom-menu {
-  bottom: calc(100% + 6px);
-  top: auto;
-  right: 0;
+  /* fixed 定位 + 显式 top（!important 压过 .menu 基础 top 的级联干扰） */
+  position: fixed !important;
+  top: calc(100vh - 302px) !important;
+  right: 16px !important;
+  left: auto !important;
   min-width: 120px;
 }
 
