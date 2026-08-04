@@ -140,6 +140,40 @@ export default function Toolbar({ editor, onAi }) {
       </div>
       <div className="divider" />
 
+      {/* 字号 + 字体 */}
+      <select
+        className="tb-select tb-style-select"
+        title="字号"
+        value={editor.getAttributes('textStyle').fontSize || ''}
+        onChange={(e) => {
+          const v = e.target.value
+          editor.chain().focus().setMark('textStyle', { fontSize: v || null }).run()
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <option value="">字号</option>
+        {['12', '14', '16', '18', '20', '24', '28', '32'].map((s) => (
+          <option key={s} value={`${s}px`}>{s}</option>
+        ))}
+      </select>
+      <select
+        className="tb-select tb-style-select"
+        title="字体"
+        value={editor.getAttributes('textStyle').fontFamily || ''}
+        onChange={(e) => {
+          const v = e.target.value
+          editor.chain().focus().setMark('textStyle', { fontFamily: v || null }).run()
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <option value="">字体</option>
+        <option value="serif, 'Songti SC', 'SimSun'">宋体</option>
+        <option value="sans-serif, 'PingFang SC', 'Microsoft YaHei'">黑体</option>
+        <option value="'Kaiti SC', 'KaiTi', serif">楷体</option>
+        <option value="'STFangsong', 'FangSong', serif">仿宋</option>
+        <option value="'Georgia', 'Times New Roman', serif">衬线</option>
+      </select>
+
       <TB icon="bold" title="加粗 (⌘B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
       <TB icon="italic" title="斜体 (⌘I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
       <TB icon="underline" title="下划线 (⌘U)" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />

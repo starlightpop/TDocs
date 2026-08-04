@@ -42,6 +42,26 @@ const escapeHtmlText = (s) =>
 
 const isMdFile = (file) => /\.(md|markdown|mdown)$/i.test(file?.name || '')
 
+// ---------- 字号 + 字体：基于 TextStyle 扩展两个属性，避免重复注册同名 mark ----------
+const FontStyleExt = TextStyle.extend({
+  name: 'textStyle',
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: (el) => el.style.fontSize || null,
+        renderHTML: (attrs) => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
+      },
+      fontFamily: {
+        default: null,
+        parseHTML: (el) => el.style.fontFamily || null,
+        renderHTML: (attrs) => (attrs.fontFamily ? { style: `font-family: ${attrs.fontFamily}` } : {}),
+      },
+    }
+  },
+})
+
 // ---------- 分页留白：通过 ProseMirror Decoration 给分页边界段落加类名（由编辑器状态管理，不会被重排剥离） ----------
 const PAGE_PAD = 48
 const pagePadKey = new PluginKey('pagePadPadding')
@@ -108,6 +128,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       TableCell,
       TaskList,
       TaskItem.configure({ nested: true }),
+      FontStyleExt,
     ],
     [],
   )

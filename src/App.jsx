@@ -51,51 +51,124 @@ export default function App() {
 
   const theme = themePref === 'system' ? (systemDark ? 'dark' : 'light') : themePref
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
-
-  useEffect(() => {
-    saveTheme(themePref)
-  }, [themePref])
-
-  // ---------- 主题色 ----------
-  const ACCENTS = [
-    ['blue', '蓝', '#4f6ef7'],
-    ['purple', '紫', '#8b5cf6'],
-    ['green', '绿', '#10b981'],
-    ['orange', '橙', '#f59e0b'],
-    ['pink', '粉', '#ec4899'],
+  // ---------- 整体配色主题：浅色系 / 深色系各 4 套 ----------
+  // 每套定义整套界面 + 纸张配色，不再是单独的“页面颜色”
+  const THEMES = {
+    clean: {
+      name: '清新白', mode: 'light', accent: '#4f6ef7',
+      colors: {
+        'bg': '#f2f4f7', 'bg-canvas': '#e9ebef', 'surface': '#ffffff', 'surface-2': '#f1f3f6', 'surface-3': '#e7eaf0',
+        'text': '#1c1e21', 'text-2': '#4b5563', 'text-3': '#8a919c',
+        'border': '#dde1e8', 'border-strong': '#c9cfd9',
+        'accent': '#4f6ef7', 'accent-hover': '#3f5ce0', 'accent-soft': 'rgba(79,110,247,0.12)', 'accent-text': '#ffffff',
+        'page-bg': '#ffffff', 'selection': 'rgba(79,110,247,0.2)', 'scrollbar-thumb': '#c4cad4',
+      },
+    },
+    cream: {
+      name: '暖米', mode: 'light', accent: '#c98a2d',
+      colors: {
+        'bg': '#f4eee2', 'bg-canvas': '#ede5d4', 'surface': '#fdf9f0', 'surface-2': '#f8f1e3', 'surface-3': '#f0e6d2',
+        'text': '#2b2620', 'text-2': '#6d6253', 'text-3': '#9c907c',
+        'border': '#e7dcc6', 'border-strong': '#d6c8ac',
+        'accent': '#c98a2d', 'accent-hover': '#b5781f', 'accent-soft': 'rgba(201,138,45,0.14)', 'accent-text': '#ffffff',
+        'page-bg': '#fdf8ee', 'selection': 'rgba(201,138,45,0.22)', 'scrollbar-thumb': '#d2c4a8',
+      },
+    },
+    mint: {
+      name: '薄荷', mode: 'light', accent: '#2f9e6e',
+      colors: {
+        'bg': '#edf4ef', 'bg-canvas': '#e2ece5', 'surface': '#f8fbf9', 'surface-2': '#f0f7f2', 'surface-3': '#e5f0e8',
+        'text': '#1f2a24', 'text-2': '#4e6257', 'text-3': '#83938a',
+        'border': '#dce7df', 'border-strong': '#c6d8cc',
+        'accent': '#2f9e6e', 'accent-hover': '#26885d', 'accent-soft': 'rgba(47,158,110,0.13)', 'accent-text': '#ffffff',
+        'page-bg': '#f6faf7', 'selection': 'rgba(47,158,110,0.2)', 'scrollbar-thumb': '#bdd0c3',
+      },
+    },
+    lavender: {
+      name: '淡紫', mode: 'light', accent: '#8b5cf6',
+      colors: {
+        'bg': '#f1eefb', 'bg-canvas': '#e7e2f6', 'surface': '#faf9fe', 'surface-2': '#f3f0fb', 'surface-3': '#eae5f6',
+        'text': '#26223a', 'text-2': '#5d5578', 'text-3': '#948cb0',
+        'border': '#e2ddf2', 'border-strong': '#cfc7e8',
+        'accent': '#8b5cf6', 'accent-hover': '#7c4ee0', 'accent-soft': 'rgba(139,92,246,0.13)', 'accent-text': '#ffffff',
+        'page-bg': '#f8f6fd', 'selection': 'rgba(139,92,246,0.2)', 'scrollbar-thumb': '#c9c0e4',
+      },
+    },
+    night: {
+      name: '暗夜', mode: 'dark', accent: '#6d8aff',
+      colors: {
+        'bg': '#0e1013', 'bg-canvas': '#0a0c0f', 'surface': '#16191f', 'surface-2': '#1d2129', 'surface-3': '#242933',
+        'text': '#e6e8ec', 'text-2': '#a7adba', 'text-3': '#6b7280',
+        'border': '#2a2f3a', 'border-strong': '#383f4d',
+        'accent': '#6d8aff', 'accent-hover': '#85a0ff', 'accent-soft': 'rgba(109,138,255,0.16)', 'accent-text': '#0e1013',
+        'page-bg': '#16191f', 'selection': 'rgba(109,138,255,0.3)', 'scrollbar-thumb': '#3a4050',
+      },
+    },
+    ocean: {
+      name: '深海', mode: 'dark', accent: '#4f8ef7',
+      colors: {
+        'bg': '#0b1220', 'bg-canvas': '#070d18', 'surface': '#111a2c', 'surface-2': '#172238', 'surface-3': '#1e2b45',
+        'text': '#dbe6f5', 'text-2': '#93a4bf', 'text-3': '#5c6b85',
+        'border': '#1f2c42', 'border-strong': '#2b3c58',
+        'accent': '#4f8ef7', 'accent-hover': '#6ba3ff', 'accent-soft': 'rgba(79,142,247,0.17)', 'accent-text': '#0b1220',
+        'page-bg': '#101a2e', 'selection': 'rgba(79,142,247,0.3)', 'scrollbar-thumb': '#2c3b55',
+      },
+    },
+    forest: {
+      name: '墨绿', mode: 'dark', accent: '#3dbb84',
+      colors: {
+        'bg': '#0c1210', 'bg-canvas': '#080e0c', 'surface': '#121a16', 'surface-2': '#18221c', 'surface-3': '#202c24',
+        'text': '#dce8e0', 'text-2': '#8fa397', 'text-3': '#5c6e64',
+        'border': '#22302a', 'border-strong': '#2f423a',
+        'accent': '#3dbb84', 'accent-hover': '#58cf9a', 'accent-soft': 'rgba(61,187,132,0.16)', 'accent-text': '#0c1210',
+        'page-bg': '#101713', 'selection': 'rgba(61,187,132,0.28)', 'scrollbar-thumb': '#2c3b33',
+      },
+    },
+    grape: {
+      name: '暗紫', mode: 'dark', accent: '#a78bfa',
+      colors: {
+        'bg': '#120f1a', 'bg-canvas': '#0d0b14', 'surface': '#1a1626', 'surface-2': '#211c30', 'surface-3': '#2a243c',
+        'text': '#e6e0f0', 'text-2': '#a196c0', 'text-3': '#6f6588',
+        'border': '#2c2540', 'border-strong': '#3b3254',
+        'accent': '#a78bfa', 'accent-hover': '#bda4fc', 'accent-soft': 'rgba(167,139,250,0.16)', 'accent-text': '#120f1a',
+        'page-bg': '#181424', 'selection': 'rgba(167,139,250,0.3)', 'scrollbar-thumb': '#3b3254',
+      },
+    },
+  }
+  // 浅色系 / 深色系分组（菜单展示顺序）
+  const THEME_GROUPS = [
+    ['浅色系', ['clean', 'cream', 'mint', 'lavender']],
+    ['深色系', ['night', 'ocean', 'forest', 'grape']],
   ]
-  const [accent, setAccent] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.accent')
-    return ACCENTS.some(([k]) => k === saved) ? saved : 'blue'
-  })
-  useEffect(() => {
-    document.documentElement.setAttribute('data-accent', accent)
-    localStorage.setItem('inkdocs.accent', accent)
-  }, [accent])
 
-  // ---------- 页面背景色（深浅模式各自适配） ----------
-  // [key, 名称, 浅色值, 深色值]
-  const PAGE_COLORS = [
-    ['white', '白', '#ffffff', '#16191f'],
-    ['cream', '米黄', '#faf5e9', '#211e15'],
-    ['sunny', '浅黄', '#fdf6dd', '#232012'],
-    ['mint', '浅绿', '#e9f6ec', '#14211a'],
-    ['sky', '浅蓝', '#e8f2fb', '#131e29'],
-    ['lavender', '浅紫', '#f3eefb', '#1c1826'],
-    ['stone', '浅灰', '#f1f2f4', '#1b1d21'],
-  ]
-  const [pageColor, setPageColor] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.pageColor')
-    return PAGE_COLORS.some(([k]) => k === saved) ? saved : 'white'
+  // 浅色/深色组各自记住最后选择的主题，跟随系统时自动切换
+  const [lightKey, setLightKey] = useState(() => {
+    const saved = localStorage.getItem('inkdocs.themeLight')
+    return THEMES[saved] ? saved : 'clean'
   })
+  const [darkKey, setDarkKey] = useState(() => {
+    const saved = localStorage.getItem('inkdocs.themeDark')
+    return THEMES[saved] ? saved : 'night'
+  })
+  const activeThemeKey = theme === 'dark' ? darkKey : lightKey
+  const activeTheme = THEMES[activeThemeKey]
+
   useEffect(() => {
-    localStorage.setItem('inkdocs.pageColor', pageColor)
-  }, [pageColor])
-  const pageBgValue =
-    PAGE_COLORS.find(([k]) => k === pageColor)?.[theme === 'dark' ? 3 : 2] || '#ffffff'
+    localStorage.setItem('inkdocs.themeLight', lightKey)
+  }, [lightKey])
+  useEffect(() => {
+    localStorage.setItem('inkdocs.themeDark', darkKey)
+  }, [darkKey])
+
+  // 应用主题：data-theme + 整套 CSS 变量
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', activeTheme.mode)
+    const root = document.documentElement
+    for (const [k, v] of Object.entries(activeTheme.colors)) {
+      root.style.setProperty(`--${k}`, v)
+    }
+    localStorage.setItem('inkdocs.accent', activeTheme.accent)
+  }, [activeTheme])
 
   const themeIcon = themePref === 'system' ? 'monitor' : themePref === 'dark' ? 'sun' : 'moon'
 
@@ -426,16 +499,20 @@ export default function App() {
             {saveState === 'saving' ? '保存中…' : '已保存'}
           </span>
 
-          {/* 纸张尺寸 */}
+          {/* 页面：视图（宽屏）与纸张（A4/B5）分组，逻辑上一体但分区明确 */}
           <select
             className="tb-select paper-select"
             value={paper}
             onChange={(e) => setPaper(e.target.value)}
-            title="纸张尺寸"
+            title="宽屏视图 / A4 / B5 纸张"
           >
-            {Object.entries(PAPER).map(([k, [label]]) => (
-              <option key={k} value={k}>{label}</option>
-            ))}
+            <optgroup label="视图">
+              <option value="wide">宽屏</option>
+            </optgroup>
+            <optgroup label="纸张">
+              <option value="a4">A4</option>
+              <option value="b5">B5</option>
+            </optgroup>
           </select>
 
           {/* 分页样式（仅 A4/B5 时显示） */}
@@ -444,10 +521,10 @@ export default function App() {
               className="tb-select paper-select"
               value={breakStyle}
               onChange={(e) => setBreakStyle(e.target.value)}
-              title="分页样式"
+              title="分页样式：虚线分页 / 分离页面"
             >
-              <option value="dashed">虚线分页</option>
-              <option value="split">分离页面</option>
+              <option value="dashed">虚线</option>
+              <option value="split">分离</option>
             </select>
           )}
 
@@ -457,10 +534,10 @@ export default function App() {
               className="tb-select paper-select"
               value={pageLabelStyle}
               onChange={(e) => setPageLabelStyle(e.target.value)}
-              title="页码标签：上下页，或当前页/总页数"
+              title="页码标签：当前页/总页数，或上页/下页"
             >
-              <option value="total">当前页/总页数</option>
-              <option value="pair">上页/下页</option>
+              <option value="total">总数</option>
+              <option value="pair">相邻</option>
             </select>
           )}
 
@@ -517,29 +594,34 @@ export default function App() {
                   </button>
                 ))}
                 <div className="menu-sep" />
-                <div className="accent-row">
-                  {ACCENTS.map(([k, label, color]) => (
-                    <button
-                      key={k}
-                      className={`accent-dot${accent === k ? ' active' : ''}`}
-                      style={{ background: color }}
-                      data-tip={label}
-                      onClick={() => setAccent(k)}
-                    />
-                  ))}
-                </div>
-                <div className="pagecolor-row">
-                  <span className="pagecolor-label">页面颜色</span>
-                  {PAGE_COLORS.map(([k, label, light]) => (
-                    <button
-                      key={k}
-                      className={`pagecolor-dot${pageColor === k ? ' active' : ''}`}
-                      style={{ background: light }}
-                      data-tip={label}
-                      onClick={() => setPageColor(k)}
-                    />
-                  ))}
-                </div>
+                {THEME_GROUPS.map(([gname, keys]) => (
+                  <div key={gname} className="theme-group">
+                    <span className="theme-group-label">{gname}</span>
+                    <div className="theme-row">
+                      {keys.map((k) => {
+                        const t = THEMES[k]
+                        const cur = theme === 'dark' ? darkKey : lightKey
+                        return (
+                          <button
+                            key={k}
+                            className={`theme-dot${cur === k ? ' active' : ''}`}
+                            style={{ background: t.colors['surface-2'], borderColor: t.accent }}
+                            data-tip={t.name}
+                            onClick={() => {
+                              if (t.mode === 'dark') setDarkKey(k)
+                              else setLightKey(k)
+                            }}
+                          >
+                            <span
+                              className="theme-dot-accent"
+                              style={{ background: t.accent }}
+                            />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -568,7 +650,7 @@ export default function App() {
           onCommitGroupName={commitGroupName}
         />
 
-        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${PADS[pagePad]?.[1] ?? 72}px`, '--page-bg': pageBgValue }}>
+        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${PADS[pagePad]?.[1] ?? 72}px` }}>
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
