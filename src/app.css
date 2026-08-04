@@ -147,10 +147,12 @@ html.platform-mac .topbar .menu {
   z-index: 2;
 }
 .ruler-grip-l {
-  transform: translateX(-50%);
+  /* 外侧对齐：手柄整体在左侧灰边区，右缘压住边界线 */
+  transform: translateX(-100%);
 }
 .ruler-grip-r {
-  transform: translateX(50%);
+  /* 外侧对齐：手柄整体在右侧灰边区，左缘压住边界线 */
+  transform: translateX(100%);
 }
 .ruler-grip-l:hover,
 .ruler-grip-r:hover {
@@ -747,7 +749,8 @@ html.platform-mac .topbar .menu {
   transition: color 0.12s, border-color 0.12s, box-shadow 0.12s;
   user-select: none;
 }
-.para-handle:hover {
+.para-handle:hover,
+.para-handle.active {
   color: var(--accent);
   border-color: var(--accent);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
@@ -2397,4 +2400,63 @@ html.platform-mac .topbar .menu {
   max-height: 260px;
   overflow-y: auto;
   z-index: 220;
+}
+
+/* ---------- AI 内联 diff（图 2 样式） ---------- */
+.ai-inline-old {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
+}
+.ai-inline-new {
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 0 2px;
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+/* 接受/撤销浮动卡片 */
+.ai-accept-card {
+  position: fixed;
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  animation: aiCardIn 0.16s ease;
+}
+@keyframes aiCardIn {
+  from { opacity: 0; transform: translate(-50%, -90%); }
+  to { opacity: 1; transform: translate(-50%, -100%); }
+}
+.ai-accept-card.leaving {
+  opacity: 0.5;
+}
+.ai-accept-original {
+  font-size: 12px;
+  color: var(--text-3);
+  text-decoration: line-through;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-accept-btns {
+  display: flex;
+  gap: 6px;
+}
+.ai-accept-btns .btn {
+  padding: 4px 14px;
+  font-size: 12.5px;
+}
+.ai-accept-undo {
+  color: var(--text-2);
+}
+.ai-accept-ok {
+  color: var(--accent-text);
 }

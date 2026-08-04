@@ -280,6 +280,7 @@ export default function App() {
   // ---------- AI ----------
   const [aiPrompt, setAiPrompt] = useState(null) // {editor, selection, pos}
   const [aiConfigOpen, setAiConfigOpen] = useState(false)
+  const [aiInline, setAiInline] = useState(null) // 内联 diff 接受/撤销 {from, to, oldHtml, newHtml}
 
   // 大纲点击跳转后的滚动抑制，避免高亮被滚回上一个标题
   const jumpSuppressRef = useRef(0)
@@ -510,6 +511,27 @@ export default function App() {
       pos = { top: r.bottom, left: r.left + (r.width || 0) / 2, anchor: 'below' }
     }
     setAiPrompt({ editor, selection, pos })
+  }
+
+  // 选中改写结果：在文档内呈现内联 diff（原文划线 + 新内容高亮），供接受/撤销
+  const handleInlineDiff = ({ oldHtml, newHtml }) => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    const oldText = stripHtml(oldHtml).replace(/\s+/g, ' ').trim()
+    const diffHtml = `<span class="ai-inline-old">${esc(oldText)}</span><span class="ai-inline-new">${newHtml}</span>`
+    editor.chain().focus().insertContentAt({ from, to }, diffHtml).run()
+    // 渲染后计算 diff 范围，交给 Editor 显示接受卡片
+    const view = editor.view
+    setTimeout(() => {
+      const oldEl = view.dom.querySelector('.ai-inline-old')
+      const newEl = view.dom.querySelector('.ai-inline-new')
+      if (oldEl && newEl) {
+        const f = view.posAtDOM(oldEl, 0)
+        const t = view.posAtDOM(newEl, newEl.childNodes.length)
+        setAiInline({ from: f, to: t, oldHtml, newHtml })
+      }
+    }, 60)
   }
 
   // ---------- 导出 ----------
@@ -885,6 +907,8 @@ export default function App() {
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
                 aiKeepSelection={!!aiPrompt}
+                aiInline={aiInline}
+                onResolveInline={() => setAiInline(null)}
               />
               <div className="statusbar">
                 <span>{stats.words} 词</span>
@@ -952,8 +976,10 @@ export default function App() {
               pos={aiPrompt.pos}
               onClose={() => setAiPrompt(null)}
               onOpenConfig={() => { setAiConfigOpen(true); setAiPrompt(null) }}
+              onInlineDiff={handleInlineDiff}
             />
           )}
+          {/* AI 内联 diff 接受卡片（Editor 内渲染，这里只传状态） */}
           {activeDoc && showOutline && (
             <Outline
               key={activeDoc.id}

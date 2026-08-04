@@ -26,7 +26,7 @@ function splitParagraphs(html) {
   return blocks.map((el) => el.outerHTML)
 }
 
-export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig }) {
+export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig, onInlineDiff }) {
   const [text, setText] = useState('')
   const [withContext, setWithContext] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -66,7 +66,9 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
             : `改写指令：${instruction}\n\n选中内容：\n${selectionHtml}` },
         ])
         const newHtml = sanitizeHtml(cleanLLMOutput(answer))
-        setResult({ mode: 'selection', oldHtml: selectionHtml, newHtml })
+        // 内联 diff：直接在文档中呈现（原文划线 + 新内容高亮），由接受卡片确认
+        onInlineDiff?.({ oldHtml: selectionHtml, newHtml })
+        onClose()
       } else {
         // 全文模式
         const answer = await callLLM(cfg, [

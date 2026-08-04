@@ -117,6 +117,28 @@ const CodeBlock = Node.create({
   renderHTML({ HTMLAttributes }) {
     return ['pre', mergeAttributes(HTMLAttributes), ['code', 0]]
   },
+  addCommands() {
+    return {
+      setCodeBlock:
+        (attributes) =>
+        ({ commands }) =>
+          commands.setNode(this.name, attributes),
+      toggleCodeBlock:
+        (attributes) =>
+        ({ commands }) =>
+          commands.toggleNode(this.name, 'paragraph', attributes),
+      setCodeBlockAt:
+        (position, attributes) =>
+        ({ state, dispatch, chain }) => {
+          const node = state.doc.nodeAt(position)
+          if (!node) return false
+          if (node.type.name === this.name) {
+            return chain().setNodeAt(position, 'paragraph').run()
+          }
+          return chain().setNodeAt(position, this.name, attributes).run()
+        },
+    }
+  },
   addNodeView() {
     return ({ node }) => {
       const pre = document.createElement('pre')
@@ -133,6 +155,41 @@ const CodeBlock = Node.create({
     }
   },
 })
+
+// AI 内联 diff 接受卡片（图 2 样式：原文划线 + 撤销/接受，浮在 diff 上方）
+function AiAcceptCard({ editor, diff, onResolve }) {
+  const [pos, setPos] = useState(null)
+  const [leaving, setLeaving] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const el = editor?.view?.dom?.querySelector('.ai-inline-new')
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPos({ top: r.top - 8, left: r.left + r.width / 2 })
+    }, 80)
+    return () => clearTimeout(t)
+  }, [editor, diff])
+  const oldText = (diff.oldHtml || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  const resolve = (accept) => {
+    if (!editor) return
+    editor.chain().focus().insertContentAt({ from: diff.from, to: diff.to }, accept ? diff.newHtml : diff.oldHtml).run()
+    onResolve?.(accept)
+  }
+  if (!pos) return null
+  return (
+    <div
+      className={`ai-accept-card${leaving ? ' leaving' : ''}`}
+      style={{ top: pos.top, left: pos.left, transform: 'translate(-50%, -100%)' }}
+      onMouseLeave={() => { setLeaving(true); setTimeout(() => setLeaving(false), 300) }}
+    >
+      <div className="ai-accept-original">{oldText || '（原文）'}</div>
+      <div className="ai-accept-btns">
+        <button className="btn ai-accept-undo" onClick={() => resolve(false)}>撤销</button>
+        <button className="btn btn-primary ai-accept-ok" onClick={() => resolve(true)}>接受</button>
+      </div>
+    </div>
+  )
+}
 
 // ---------- 分页留白：通过 ProseMirror Decoration 给分页边界段落加类名（由编辑器状态管理，不会被重排剥离） ----------
 const PAGE_PAD = 96
@@ -169,7 +226,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiKeepSelection = false }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiKeepSelection = false, aiInline = null, onResolveInline }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -629,10 +686,10 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         setCtxMenu({ x: e.clientX, y: e.clientY })
       }}
     >
-      {/* 段落悬停手柄（飞书式大 T） */}
-      {hoverBlock && !blockMenuOpen && (
+      {/* 段落悬停手柄（飞书式大 T）：始终显示，菜单在右侧展开不替换它 */}
+      {hoverBlock && (
         <div
-          className="para-handle"
+          className={`para-handle${blockMenuOpen ? ' active' : ''}`}
           style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 }}
           onMouseEnter={() => {
             clearTimeout(hoverCloseTimerRef.current)
@@ -650,7 +707,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       {hoverBlock && blockMenuOpen && (
         <div
           className="menu para-handle-menu"
-          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 }}
+          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 + 46 }}
           onMouseEnter={() => {
             clearTimeout(hoverOpenTimerRef.current)
             clearTimeout(hoverCloseTimerRef.current)
@@ -679,6 +736,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         </div>
       )}
       <BubbleBar editor={editor} pos={bubblePos} onAi={onAi} />
+      {/* AI 内联 diff 接受卡片 */}
+      {aiInline && <AiAcceptCard editor={editor} diff={aiInline} onResolve={onResolveInline} />}
       <div className="page-wrap" ref={wrapRef}>
         <EditorContent editor={editor} className={`page${paged ? ' paged' : ''}`} />
         {paged && pageH > 0 && breakStyle === 'dashed' && (
