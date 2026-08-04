@@ -136,7 +136,9 @@ export default function Toolbar({ editor, onAi }) {
     if (lang === 'javascript' || lang === 'plaintext') {
       const logs = []
       const origLog = console.log
+      const origPrint = window.print
       console.log = (...a) => logs.push(a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' '))
+      window.print = () => { logs.push('[print]') } // 屏蔽 window.print，避免误开打印对话框
       try {
         const ret = new Function(codeText)()
         const text = [...logs, ret !== undefined ? String(ret) : ''].filter(Boolean).join('\n')
@@ -145,6 +147,7 @@ export default function Toolbar({ editor, onAi }) {
         setRunOutput({ text: String(e?.message || e), ok: false, ...pos })
       } finally {
         console.log = origLog
+        window.print = origPrint
       }
     } else {
       setRunOutput({ text: `当前版本暂不支持运行 ${lang}，请选择「JavaScript」或「纯文本」测试`, ok: false, ...pos })

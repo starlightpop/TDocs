@@ -499,11 +499,13 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
             const prevPadBottom = parseFloat(getComputedStyle(blocks[best]).paddingBottom) || 0
             const prevMargin = parseFloat(getComputedStyle(blocks[best]).marginBottom) || 0
             const prevTextBottom = bottomOf(blocks[best]) - prevPadBottom
-            const boundary = prevTextBottom + PAGE_PAD + prevMargin / 2
-            offsets.push(boundary - refTop)
             // 本页内容占用（含顶部留白），底部留白 = 页高 - 占用，保证每页等高且上下对称
             const occupy = prevTextBottom - pageTopEdge
-            pagePads.push(Math.max(PAGE_PAD, Math.round(pageH - occupy)))
+            const prevPad = Math.max(PAGE_PAD, Math.round(pageH - occupy))
+            pagePads.push(prevPad)
+            // 分页边界 = 内容底 + 动态底部留白（gap 定位到整页高度处）
+            const boundary = prevTextBottom + prevPad + prevMargin / 2
+            offsets.push(boundary - refTop)
             // 下一页从边界开始，内容可用到 边界 + 页高 - 下留白
             pageTopEdge = boundary
             areaEnd = pageTopEdge + pageH - PAGE_PAD
