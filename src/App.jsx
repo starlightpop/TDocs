@@ -8,11 +8,11 @@ import AiPanel from './components/AiPanel.jsx'
 import { Icon } from './components/Icons.jsx'
 import {
   loadDocs, saveDocs, loadActiveId, saveActiveId, createDoc,
-  loadTheme, saveTheme, stripHtml, firstLineTitle,
+  loadTheme, saveTheme, stripHtml,
   loadGroups, saveGroups, createGroup,
 } from './lib/storage.js'
 import { exportHtml, exportMarkdown, exportText } from './lib/exporter.js'
-import { scrollToHeadingByIndex } from './lib/headings.js'
+import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs ✨</h1>
@@ -174,8 +174,6 @@ export default function App() {
     localStorage.setItem('inkdocs.accent', activeTheme.accent)
   }, [activeTheme])
 
-  const themeIcon = themePref === 'system' ? 'monitor' : themePref === 'dark' ? 'sun' : 'moon'
-
   // ---------- 纸张尺寸（宽屏不分页；A4/B5 按 Word 式分页显示） ----------
   const PAPER = {
     wide: ['宽屏', 880, 0],
@@ -206,14 +204,17 @@ export default function App() {
     localStorage.setItem('inkdocs.pageLabelStyle', pageLabelStyle)
   }, [pageLabelStyle])
 
-  // ---------- 页边距（左右宽距） ----------
+  // ---------- 页边距（左右宽距）：数值型，可拖标尺微调，也可点击预设档位 ----------
   const PADS = { narrow: ['窄', 40], normal: ['常规', 72], wide: ['宽', 104] }
   const [pagePad, setPagePad] = useState(() => {
     const saved = localStorage.getItem('inkdocs.pagePad')
-    return PADS[saved] ? saved : 'normal'
+    // 兼容旧版档位 key
+    if (PADS[saved]) return PADS[saved][1]
+    const n = Number(saved)
+    return n >= 24 && n <= 160 ? n : 72
   })
   useEffect(() => {
-    localStorage.setItem('inkdocs.pagePad', pagePad)
+    localStorage.setItem('inkdocs.pagePad', String(pagePad))
   }, [pagePad])
 
   // ---------- 文档 ----------
@@ -230,13 +231,36 @@ export default function App() {
   const [stats, setStats] = useState({ words: 0, chars: 0 })
   const [selectedChars, setSelectedChars] = useState(0)
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showPageMenu, setShowPageMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showOutline, setShowOutline] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
-  const [showExportMenu, setShowExportMenu] = useState(false)
-  const [showThemeMenu, setShowThemeMenu] = useState(false)
-  const [showOutline, setShowOutline] = useState(false)
   const [rulerOpen, setRulerOpen] = useState(false)
+  const rulerRef = useRef(null)
+  const rulerDownRef = useRef(null)
+
+  // 拖动标尺灰白交界：连续调整页边距（24~160px）
+  const startRulerDrag = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const ruler = rulerRef.current
+    if (!ruler) return
+    const startX = e.clientX
+    const startPad = pagePad
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX
+      const next = Math.min(160, Math.max(24, startPad + dx))
+      setPagePad(Math.round(next))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
   const [headings, setHeadings] = useState([])
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(-1)
   const [modal, setModal] = useState(null) // {type:'rename'|'delete', doc}
@@ -354,11 +378,9 @@ export default function App() {
     })
   }
 
-  const handleRename = (doc) => setModal({ type: 'rename', doc })
-
-  const doRename = (name) => {
-    persist(docs.map((d) => (d.id === modal.doc.id ? { ...d, title: name || '无标题文档', updatedAt: Date.now() } : d)))
-    setModal(null)
+  // 文件重命名：直接原处内联编辑后提交
+  const doRenameDoc = (doc, name) => {
+    persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || '无标题文档', updatedAt: Date.now() } : d)))
   }
 
   // ---------- 分组操作 ----------
@@ -408,6 +430,23 @@ export default function App() {
     persist(docs.map((d) => (d.id === docId ? { ...d, group: groupId } : d)))
   }
 
+  // 文件拖出窗口 → 导出为本地 HTML 文件（系统拖拽）
+  const handleDragExport = async (doc) => {
+    try {
+      await window.tdocs?.dragExport?.({ title: doc.title || '无标题文档', html: doc.content })
+    } catch { /* 拖出导出失败时静默 */ }
+  }
+
+  // 文件夹拖拽排序：把 gid 移到 targetId 前面
+  const handleReorderGroups = (gid, targetId) => {
+    const next = groups.filter((g) => g.id !== gid)
+    const targetIdx = next.findIndex((g) => g.id === targetId)
+    const moved = groups.find((g) => g.id === gid)
+    if (!moved || targetIdx < 0) return
+    next.splice(targetIdx, 0, moved)
+    persistGroups(next)
+  }
+
   // ---------- AI ----------
   const openAi = () => {
     if (!editor) return
@@ -417,12 +456,30 @@ export default function App() {
   }
 
   // ---------- 导出 ----------
-  const doExport = (kind) => {
+  const doExport = async (kind) => {
     if (!activeDoc) return
     const title = activeDoc.title || '无标题文档'
     if (kind === 'html') exportHtml(title, activeDoc.content)
     else if (kind === 'md') exportMarkdown(title, activeDoc.content)
     else if (kind === 'txt') exportText(title, stripHtml(activeDoc.content))
+    else if (kind === 'pdf') {
+      if (window.tdocs?.exportPdf) {
+        try {
+          const buf = await window.tdocs.exportPdf({ title, html: activeDoc.content })
+          const blob = new Blob([buf], { type: 'application/pdf' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${title || '未命名'}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+        } catch (err) {
+          console.error('PDF 导出失败', err)
+        }
+      }
+    }
     setShowExportMenu(false)
   }
 
@@ -442,15 +499,27 @@ export default function App() {
     return () => window.removeEventListener('click', close)
   }, [rulerOpen])
 
-  // 点击外部关闭导出菜单
+  // 点击外部关闭顶栏菜单（导出 / 页面 / 设置）
   useEffect(() => {
-    if (!showExportMenu && !showThemeMenu) return
-    const close = () => { setShowExportMenu(false); setShowThemeMenu(false) }
+    if (!showExportMenu && !showPageMenu && !showSettings) return
+    const close = () => { setShowExportMenu(false); setShowPageMenu(false); setShowSettings(false) }
     setTimeout(() => window.addEventListener('click', close), 0)
     return () => window.removeEventListener('click', close)
-  }, [showExportMenu, showThemeMenu])
+  }, [showExportMenu, showPageMenu, showSettings])
 
-  // 大纲点击跳转：立即高亮目标标题，并短暂抑制滚动重算
+  // 窗口过窄时自动收起侧边栏大纲树，避免页面被挤压遮挡
+  useEffect(() => {
+    const onResize = () => {
+      const main = mainRef.current
+      if (!main) return
+      const w = main.clientWidth
+      if (w < 700) setTreeOpen(false)
+      else setTreeOpen(true)
+    }
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   const handleOutlineJump = (i) => {
     setActiveHeadingIdx(i)
     jumpSuppressRef.current = Date.now() + 900
@@ -514,34 +583,92 @@ export default function App() {
             {saveState === 'saving' ? '保存中…' : '已保存'}
           </span>
 
-          {/* 页面：视图（宽屏）与纸张（A4/B5）分组，逻辑上一体但分区明确 */}
-          <select
-            className="tb-select paper-select"
-            value={paper}
-            onChange={(e) => setPaper(e.target.value)}
-            title="宽屏视图 / A4 / B5 纸张"
-          >
-            <optgroup label="视图">
-              <option value="wide">宽屏</option>
-            </optgroup>
-            <optgroup label="纸张">
-              <option value="a4">A4</option>
-              <option value="b5">B5</option>
-            </optgroup>
-          </select>
+          {/* 页面：宽屏 / A4 / B5（自定义菜单，与其余下拉风格统一） */}
+          <div className="menu-wrap">
+            <button
+              className="tb-block-btn tb-page-btn"
+              title="宽屏视图 / A4 / B5 纸张"
+              onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); setShowSettings(false); setShowPageMenu(!showPageMenu) }}
+            >
+              {PAPER[paper][0]}
+              <Icon name="chevronDown" size={13} />
+            </button>
+            {showPageMenu && (
+              <div className="menu page-menu" onClick={(e) => e.stopPropagation()}>
+                <div className="settings-label">视图</div>
+                <button
+                  className={`menu-item${paper === 'wide' ? ' active' : ''}`}
+                  onClick={() => { setPaper('wide'); setShowPageMenu(false) }}
+                >
+                  <span>宽屏（不分页）</span>
+                  {paper === 'wide' && <span className="menu-item-check">✓</span>}
+                </button>
+                <div className="menu-sep" />
+                <div className="settings-label">纸张</div>
+                <button
+                  className={`menu-item${paper === 'a4' ? ' active' : ''}`}
+                  onClick={() => { setPaper('a4'); setShowPageMenu(false) }}
+                >
+                  <span>A4</span>
+                  {paper === 'a4' && <span className="menu-item-check">✓</span>}
+                </button>
+                <button
+                  className={`menu-item${paper === 'b5' ? ' active' : ''}`}
+                  onClick={() => { setPaper('b5'); setShowPageMenu(false) }}
+                >
+                  <span>B5</span>
+                  {paper === 'b5' && <span className="menu-item-check">✓</span>}
+                </button>
+              </div>
+            )}
+          </div>
 
-          {/* 设置（⚙️）：不常用设置集中于此 */}
+          {/* 设置（⚙️）：主题 + 分页相关设置集中于此 */}
           <div className="menu-wrap">
             <button
               className="icon-btn"
               data-tip="设置"
-              onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); setShowThemeMenu(false); setShowExportMenu(false) }}
+              onClick={(e) => { e.stopPropagation(); setShowPageMenu(false); setShowExportMenu(false); setShowSettings(!showSettings) }}
             >
               <Icon name="settings" />
             </button>
             {showSettings && (
               <div className="menu settings-menu" onClick={(e) => e.stopPropagation()}>
-                {paper !== 'wide' ? (
+                <div className="settings-label">明暗模式</div>
+                <div className="settings-seg">
+                  <button className={themePref === 'light' ? 'active' : ''} onClick={() => setThemePref('light')}>浅色</button>
+                  <button className={themePref === 'dark' ? 'active' : ''} onClick={() => setThemePref('dark')}>深色</button>
+                  <button className={themePref === 'system' ? 'active' : ''} title="跟随系统自动切换明暗" onClick={() => setThemePref('system')}>跟随系统</button>
+                </div>
+                <div className="settings-label">主题颜色</div>
+                {THEME_GROUPS.map(([gname, keys]) => (
+                  <div key={gname} className="theme-group">
+                    <span className="theme-group-label">{gname}</span>
+                    <div className="theme-row">
+                      {keys.map((k) => {
+                        const t = THEMES[k]
+                        const cur = theme === 'dark' ? darkKey : lightKey
+                        return (
+                          <button
+                            key={k}
+                            className={`theme-dot${cur === k ? ' active' : ''}`}
+                            style={{ background: t.colors['surface-2'], borderColor: t.accent }}
+                            data-tip={t.name}
+                            onClick={() => {
+                              // 点击色卡立即切换：浅色系 → 浅色主题，深色系 → 深色主题
+                              if (t.mode === 'dark') { setDarkKey(k); setThemePref('dark') }
+                              else { setLightKey(k); setThemePref('light') }
+                            }}
+                          >
+                            <span className="theme-dot-accent" style={{ background: t.accent }} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {paper !== 'wide' && <div className="menu-sep" />}
+                {paper !== 'wide' && (
                   <>
                     <div className="settings-label">分页样式</div>
                     <div className="settings-seg">
@@ -554,8 +681,6 @@ export default function App() {
                       <button className={pageLabelStyle === 'pair' ? 'active' : ''} title="第 1 页 / 第 2 页" onClick={() => setPageLabelStyle('pair')}>相邻</button>
                     </div>
                   </>
-                ) : (
-                  <div className="settings-empty">切换到 A4/B5 后，分页相关设置出现在这里</div>
                 )}
               </div>
             )}
@@ -573,6 +698,9 @@ export default function App() {
               </button>
               {showExportMenu && (
                 <div className="menu" onClick={(e) => e.stopPropagation()}>
+                  <button className="menu-item" onClick={() => doExport('pdf')}>
+                    <Icon name="download" size={15} /> PDF (.pdf)
+                  </button>
                   <button className="menu-item" onClick={() => doExport('md')}>
                     <Icon name="doc" size={15} /> Markdown (.md)
                   </button>
@@ -586,72 +714,6 @@ export default function App() {
               )}
             </div>
           )}
-
-          {/* 主题：浅色 / 深色 / 跟随系统 */}
-          <div className="menu-wrap">
-            <button
-              className="icon-btn"
-              data-tip="主题模式"
-              onClick={(e) => { e.stopPropagation(); setShowThemeMenu(!showThemeMenu); setShowExportMenu(false) }}
-            >
-              <Icon name={themeIcon} />
-            </button>
-            {showThemeMenu && (
-              <div className="menu" onClick={(e) => e.stopPropagation()}>
-                {[
-                  ['light', '浅色', 'sun'],
-                  ['dark', '深色', 'moon'],
-                  ['system', '跟随系统', 'monitor'],
-                ].map(([v, label, ic]) => (
-                  <button
-                    key={v}
-                    className={`menu-item${themePref === v ? ' active' : ''}`}
-                    onClick={() => { setThemePref(v); setShowThemeMenu(false) }}
-                  >
-                    <Icon name={ic} size={15} />
-                    <span>{label}</span>
-                    {themePref === v && <span className="menu-item-check">✓</span>}
-                  </button>
-                ))}
-                <div className="menu-sep" />
-                {THEME_GROUPS.map(([gname, keys]) => (
-                  <div key={gname} className="theme-group">
-                    <span className="theme-group-label">{gname}</span>
-                    <div className="theme-row">
-                      {keys.map((k) => {
-                        const t = THEMES[k]
-                        const cur = theme === 'dark' ? darkKey : lightKey
-                        return (
-                          <button
-                            key={k}
-                            className={`theme-dot${cur === k ? ' active' : ''}`}
-                            style={{ background: t.colors['surface-2'], borderColor: t.accent }}
-                            data-tip={t.name}
-                            onClick={() => {
-                              // 点击色卡立即切换：浅色系 → 浅色主题，深色系 → 深色主题
-                              if (t.mode === 'dark') {
-                                setDarkKey(k)
-                                setThemePref('dark')
-                              } else {
-                                setLightKey(k)
-                                setThemePref('light')
-                              }
-                              setShowThemeMenu(false)
-                            }}
-                          >
-                            <span
-                              className="theme-dot-accent"
-                              style={{ background: t.accent }}
-                            />
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
@@ -665,7 +727,6 @@ export default function App() {
           headings={headings}
           onSelect={handleSelect}
           onCreate={handleCreate}
-          onRename={handleRename}
           onDelete={handleDelete}
           onMoveDoc={handleMoveDoc}
           onAddGroup={handleAddGroup}
@@ -675,35 +736,58 @@ export default function App() {
           treeOpen={treeOpen}
           editingGroupId={editingGroupId}
           onCommitGroupName={commitGroupName}
+          onRenameDoc={doRenameDoc}
+          onSetHeadingLevel={setHeadingsLevel}
+          onDragExport={handleDragExport}
+          onReorderGroups={handleReorderGroups}
         />
 
-        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${PADS[pagePad]?.[1] ?? 72}px` }}>
+        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${PAPER[paper]?.[1] ?? 880}px`, '--page-h': `${PAPER[paper]?.[2] || 0}px`, '--page-pad': `${pagePad}px` }}>
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
-              {/* 边距标尺：点击弹出预设阈值（窄/常规/宽），三角标记当前档位 */}
+              {/* 边距标尺（Word/WPS 式）：宽度与页面文字区对齐，可拖动灰白交界调边距，点击弹预设档位 */}
               <div
                 className="ruler"
-                title="点击调整页边距"
-                onClick={(e) => { e.stopPropagation(); setRulerOpen(!rulerOpen) }}
+                ref={rulerRef}
+                title="拖动标尺边缘调整页边距；点击弹出预设档位"
+                onMouseDown={(e) => {
+                  if (e.target.closest('.ruler-grip-l, .ruler-grip-r')) return
+                  // 记录点击位置，避免拖动与弹菜单冲突
+                  rulerDownRef.current = { x: e.clientX, y: e.clientY, open: rulerOpen }
+                }}
+                onClick={(e) => {
+                  if (e.target.closest('.ruler-grip-l, .ruler-grip-r')) return
+                  const d = rulerDownRef.current
+                  if (d && (Math.abs(e.clientX - d.x) > 4 || Math.abs(e.clientY - d.y) > 4)) return
+                  setRulerOpen(!rulerOpen)
+                }}
               >
-                <div className="ruler-line" />
+                <div className="ruler-track">
+                  <div className="ruler-margin-l" style={{ width: `${pagePad}px` }} />
+                  <div className="ruler-text" />
+                  <div className="ruler-margin-r" style={{ width: `${pagePad}px` }} />
+                </div>
                 <div
-                  className="ruler-mark"
-                  style={{
-                    left: `${((PADS[pagePad][1] - 40) / (104 - 40)) * 100}%`,
-                  }}
+                  className="ruler-grip-l"
+                  style={{ left: `${pagePad}px` }}
+                  onMouseDown={(e) => startRulerDrag(e)}
+                />
+                <div
+                  className="ruler-grip-r"
+                  style={{ right: `${pagePad}px` }}
+                  onMouseDown={(e) => startRulerDrag(e)}
                 />
                 {rulerOpen && (
                   <div className="menu ruler-menu" onClick={(e) => e.stopPropagation()}>
-                    {Object.entries(PADS).map(([k, [label]]) => (
+                    {Object.entries(PADS).map(([k, [label, v]]) => (
                       <button
                         key={k}
-                        className={`menu-item${pagePad === k ? ' active' : ''}`}
-                        onClick={() => { setPagePad(k); setRulerOpen(false) }}
+                        className={`menu-item${pagePad === v ? ' active' : ''}`}
+                        onClick={() => { setPagePad(v); setRulerOpen(false) }}
                       >
-                        <span>{label}边距</span>
-                        {pagePad === k && <span className="menu-item-check">✓</span>}
+                        <span>{label}边距（{v}px）</span>
+                        {pagePad === v && <span className="menu-item-check">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -731,11 +815,18 @@ export default function App() {
                 <div className="right">
                   <div className="menu-wrap zoom-wrap">
                     <button
-                      className="statusbar-link"
-                      title="点击选择常用缩放比例；⌘/Ctrl + 滚轮可微调"
-                      onClick={(e) => { e.stopPropagation(); setZoomMenuOpen(!zoomMenuOpen) }}
+                      className="statusbar-link zoom-main"
+                      title="点击恢复 100%；⌘/Ctrl + 滚轮可微调"
+                      onClick={() => setZoom(1)}
                     >
                       {Math.round(zoom * 100)}%
+                    </button>
+                    <button
+                      className="zoom-arrow"
+                      title="选择缩放比例"
+                      onClick={(e) => { e.stopPropagation(); setZoomMenuOpen(!zoomMenuOpen) }}
+                    >
+                      <Icon name="chevronDown" size={10} />
                     </button>
                     {zoomMenuOpen && (
                       <div className="menu zoom-menu" onClick={(e) => e.stopPropagation()}>
@@ -817,37 +908,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {modal?.type === 'rename' && (
-        <RenameModal doc={modal.doc} onConfirm={doRename} onCancel={() => setModal(null)} />
-      )}
-    </div>
-  )
-}
-
-function RenameModal({ doc, onConfirm, onCancel }) {
-  // 默认标题时自动预填正文首行内容
-  const initial = doc.title && doc.title !== '无标题文档'
-    ? doc.title
-    : firstLineTitle(doc.content) || ''
-  const [name, setName] = useState(initial)
-  const inputRef = useRef(null)
-  useEffect(() => inputRef.current?.select(), [])
-  return (
-    <div className="modal-mask" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>重命名文档</h3>
-        <input
-          ref={inputRef}
-          value={name}
-          autoFocus
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onConfirm(name) }}
-        />
-        <div className="modal-actions">
-          <button className="btn" onClick={onCancel}>取消</button>
-          <button className="btn btn-primary" onClick={() => onConfirm(name)}>确定</button>
-        </div>
-      </div>
     </div>
   )
 }

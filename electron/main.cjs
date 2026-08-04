@@ -1,8 +1,33 @@
 // TDocs 桌面端主进程（Electron）
-const { app, BrowserWindow, Menu, shell } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
+const fs = require('fs')
 const path = require('path')
 
 const isMac = process.platform === 'darwin'
+
+/** 导出用完整 HTML 文档（带基础排版样式） */
+function buildHtmlDoc(title, html) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${String(title).replace(/[<>&"]/g, '')}</title>
+<style>
+  body{max-width:820px;margin:40px auto;padding:0 24px;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;color:#1c1e21}
+  h1,h2,h3{line-height:1.3}
+  img{max-width:100%}
+  pre{background:#f1f3f6;padding:14px;border-radius:8px;overflow-x:auto}
+  blockquote{border-left:3px solid #4f6ef7;margin-left:0;padding-left:16px;color:#555}
+  table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}
+</style>
+</head>
+<body>
+<h1>${String(title).replace(/[<>&"]/g, '')}</h1>
+${html}
+</body>
+</html>`
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -23,6 +48,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -42,6 +68,36 @@ function createWindow() {
   })
 }
 
+// ---------- IPC：拖出导出 + PDF ----------
+function registerIpc() {
+  // 文件拖出窗口：写入临时 HTML 文件并交给系统拖拽
+  ipcMain.handle('drag-export', async (event, { title, html }) => {
+    const safeName = String(title || '未命名').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
+    const file = path.join(app.getPath('temp'), `${safeName}-tdocs.html`)
+    await fs.promises.writeFile(file, buildHtmlDoc(title, html), 'utf8')
+    const icon = path.join(__dirname, '../build/icon.png')
+    event.sender.startDrag({ file, icon: fs.existsSync(icon) ? icon : undefined })
+  })
+
+  // 导出 PDF：隐藏窗口渲染 → printToPDF → 返回 Buffer
+  ipcMain.handle('export-pdf', async (event, { title, html }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const pdfWin = new BrowserWindow({
+      show: false,
+      width: 900,
+      height: 1200,
+      webPreferences: { sandbox: true, contextIsolation: true },
+    })
+    try {
+      await pdfWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildHtmlDoc(title, html)))
+      const buf = await pdfWin.webContents.printToPDF({ pageSize: 'A4', printBackground: true })
+      return buf
+    } finally {
+      pdfWin.destroy()
+    }
+  })
+}
+
 // 简洁应用菜单（保留系统快捷键能力）
 function buildMenu() {
   const template = [
@@ -56,6 +112,7 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   buildMenu()
+  registerIpc()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

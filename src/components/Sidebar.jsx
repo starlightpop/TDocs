@@ -8,20 +8,19 @@ export default function Sidebar({
   onSelect, onCreate, onRename, onDelete,
   onMoveDoc, onAddGroup, onRenameGroup, onDeleteGroup,
   onJumpHeading, treeOpen = true, editingGroupId, onCommitGroupName,
+  onRenameDoc, onSetHeadingLevel, onDragExport,
 }) {
   const [query, setQuery] = useState('')
   const [ctxMenu, setCtxMenu] = useState(null)
-  const [dotsOpenId, setDotsOpenId] = useState(null)
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set())
   const [editName, setEditName] = useState('')
-
-  // 点击外部关闭三点菜单
-  useEffect(() => {
-    if (!dotsOpenId) return
-    const close = () => setDotsOpenId(null)
-    setTimeout(() => window.addEventListener('click', close), 0)
-    return () => window.removeEventListener('click', close)
-  }, [dotsOpenId])
+  // 侧边栏标题树多选
+  const [headingSel, setHeadingSel] = useState(() => new Set())
+  // 拖拽高亮的文件夹
+  const [dragOverGroupId, setDragOverGroupId] = useState(null)
+  // 文件内联重命名
+  const [editingDocId, setEditingDocId] = useState(null)
+  const [docEditName, setDocEditName] = useState('')
 
   // 进入内联编辑时初始化名称（新建或重命名文件夹）
   useEffect(() => {
@@ -50,7 +49,7 @@ export default function Sidebar({
 
   const docMenuItems = (doc) => [
     { label: '打开', icon: <Icon name="doc" size={15} />, action: () => onSelect(doc.id) },
-    { label: '重命名', icon: <Icon name="edit" size={15} />, action: () => onRename(doc) },
+    { label: '重命名', icon: <Icon name="edit" size={15} />, action: () => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) } },
     { sep: true },
     ...moveItems(doc),
     { sep: true },
@@ -77,15 +76,40 @@ export default function Sidebar({
     <div key={doc.id} className="doc-item-wrap">
       <div
         className={`doc-item${doc.id === activeId ? ' active' : ''}`}
-        onClick={() => onSelect(doc.id)}
-        onDoubleClick={() => onRename(doc)}
-        title="双击重命名"
+        onClick={() => { if (editingDocId === doc.id) return; onSelect(doc.id) }}
+        onDoubleClick={() => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) }}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/tdocs-doc', doc.id)
+          e.dataTransfer.effectAllowed = 'copyMove'
+        }}
+        onDragEnd={(e) => {
+          // 未落到有效目标（如拖出窗口）→ 导出该文档
+          if (e.dataTransfer.dropEffect === 'none') {
+            onDragExport?.(doc)
+          }
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           setCtxMenu({ x: e.clientX, y: e.clientY, items: docMenuItems(doc) })
         }}
       >
-        <div className="doc-item-title">{doc.title || '无标题文档'}</div>
+        {editingDocId === doc.id ? (
+          <input
+            className="doc-title-input doc-rename-input"
+            autoFocus
+            value={docEditName}
+            onChange={(e) => setDocEditName(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { onRenameDoc?.(doc, docEditName); setEditingDocId(null) }
+              if (e.key === 'Escape') setEditingDocId(null)
+            }}
+            onBlur={() => { if (editingDocId === doc.id) { onRenameDoc?.(doc, docEditName); setEditingDocId(null) } }}
+          />
+        ) : (
+          <div className="doc-item-title">{doc.title || '无标题文档'}</div>
+        )}
         <div className="doc-item-meta">
           {formatTime(doc.updatedAt)}
         </div>
@@ -94,28 +118,14 @@ export default function Sidebar({
             className="icon-btn"
             data-tip="更多操作"
             aria-label="更多操作"
-            onClick={(e) => { e.stopPropagation(); setDotsOpenId(dotsOpenId === doc.id ? null : doc.id) }}
+            onClick={(e) => {
+              e.stopPropagation()
+              const r = e.currentTarget.getBoundingClientRect()
+              setCtxMenu({ x: r.left, y: r.bottom + 4, items: docMenuItems(doc) })
+            }}
           >
             <Icon name="dots" size={15} />
           </button>
-          {dotsOpenId === doc.id && (
-            <div className="menu doc-dots-menu" onClick={(e) => e.stopPropagation()}>
-              {docMenuItems(doc).map((it, i) =>
-                it.sep ? (
-                  <div key={i} className="menu-sep" />
-                ) : (
-                  <button
-                    key={i}
-                    className={`menu-item${it.danger ? ' danger' : ''}`}
-                    onClick={() => { setDotsOpenId(null); it.action() }}
-                  >
-                    {it.icon}
-                    <span>{it.label}</span>
-                  </button>
-                ),
-              )}
-            </div>
-          )}
         </div>
       </div>
       {/* 当前文档的标题树（类 Google Docs 文档大纲，再次点击文档可收起） */}
@@ -124,16 +134,34 @@ export default function Sidebar({
           {headings.map((h, i) => (
             <div
               key={`${i}-${h.text}`}
-              className={`doc-heading lv-${h.level}`}
+              className={`doc-heading lv-${h.level}${headingSel.has(i) ? ' selected' : ''}`}
               title={h.text}
               onClick={(e) => {
                 e.stopPropagation()
-                onJumpHeading?.(i)
+                if (e.metaKey || e.ctrlKey) {
+                  setHeadingSel((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(i)) next.delete(i)
+                    else next.add(i)
+                    return next
+                  })
+                } else {
+                  onJumpHeading?.(i)
+                }
               }}
             >
               {h.text}
             </div>
           ))}
+          {headingSel.size > 0 && (
+            <div className="doc-heading-actions">
+              <span className="doc-heading-count">已选 {headingSel.size}</span>
+              <button className="icon-btn" data-tip="标题 1" onClick={(e) => { e.stopPropagation(); onSetHeadingLevel?.([...headingSel], 1); setHeadingSel(new Set()) }}>H1</button>
+              <button className="icon-btn" data-tip="标题 2" onClick={(e) => { e.stopPropagation(); onSetHeadingLevel?.([...headingSel], 2); setHeadingSel(new Set()) }}>H2</button>
+              <button className="icon-btn" data-tip="标题 3" onClick={(e) => { e.stopPropagation(); onSetHeadingLevel?.([...headingSel], 3); setHeadingSel(new Set()) }}>H3</button>
+              <button className="icon-btn" data-tip="转正文" onClick={(e) => { e.stopPropagation(); onSetHeadingLevel?.([...headingSel], null); setHeadingSel(new Set()) }}>T</button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -143,11 +171,26 @@ export default function Sidebar({
     const groupDocs = filtered.filter((d) => d.group === group.id)
     const isCollapsed = collapsedGroups.has(group.id)
     const isEditing = editingGroupId === group.id
+    const dragOver = dragOverGroupId === group.id
     return (
       <div key={group.id} className="group-section">
         <div
-          className="group-header"
+          className={`group-header${isCollapsed ? '' : ''}`}
           onClick={() => !isEditing && toggleGroup(group.id)}
+          onDoubleClick={() => { setEditName(group.name); onRenameGroup(group) }}
+          draggable={!isEditing}
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/tdocs-group', group.id)
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault()
+            const docId = e.dataTransfer.getData('text/tdocs-doc')
+            if (docId) { onMoveDoc(docId, group.id); setDragOverGroupId(null); return }
+            const gid = e.dataTransfer.getData('text/tdocs-group')
+            if (gid && gid !== group.id) onReorderGroups?.(gid, group.id)
+          }}
           onContextMenu={(e) => {
             e.preventDefault()
             setCtxMenu({
@@ -168,9 +211,8 @@ export default function Sidebar({
             <input
               className="group-name-input"
               autoFocus
-              ref={(el) => { if (el) setTimeout(() => { el.focus(); el.select() }, 0) }}
+              ref={(el) => { if (el) setTimeout(() => { el.focus() }, 0) }}
               value={editName}
-              onFocus={(e) => e.target.select()}
               onChange={(e) => setEditName(e.target.value)}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
@@ -185,7 +227,17 @@ export default function Sidebar({
           <span className="group-count">{groupDocs.length}</span>
         </div>
         {!isCollapsed && (
-          <div className="group-docs">
+          <div
+            className={`group-docs${dragOver ? ' drag-over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOverGroupId(group.id) }}
+            onDragLeave={() => setDragOverGroupId(null)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOverGroupId(null)
+              const docId = e.dataTransfer.getData('text/tdocs-doc')
+              if (docId) onMoveDoc(docId, group.id)
+            }}
+          >
             {groupDocs.length === 0 && <div className="group-empty">空分组</div>}
             {groupDocs.map(renderDocItem)}
           </div>
@@ -238,7 +290,21 @@ export default function Sidebar({
                     <span className="group-count">{ungroupedDocs.length}</span>
                   </div>
                 )}
-                {(groups.length === 0 || !collapsedGroups.has('__ungrouped')) && ungroupedDocs.map(renderDocItem)}
+                {(groups.length === 0 || !collapsedGroups.has('__ungrouped')) && (
+                  <div
+                    className="group-docs"
+                    onDragOver={(e) => { e.preventDefault(); setDragOverGroupId('__ungrouped') }}
+                    onDragLeave={() => setDragOverGroupId(null)}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      setDragOverGroupId(null)
+                      const docId = e.dataTransfer.getData('text/tdocs-doc')
+                      if (docId) onMoveDoc(docId, '')
+                    }}
+                  >
+                    {ungroupedDocs.map(renderDocItem)}
+                  </div>
+                )}
               </div>
             )}
           </>

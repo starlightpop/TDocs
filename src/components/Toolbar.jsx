@@ -44,6 +44,8 @@ export default function Toolbar({ editor, onAi }) {
   const [showHighlight, setShowHighlight] = useState(false)
   const [showTableGrid, setShowTableGrid] = useState(false)
   const [showBlockMenu, setShowBlockMenu] = useState(false)
+  const [showFontSize, setShowFontSize] = useState(false)
+  const [showFontFamily, setShowFontFamily] = useState(false)
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
 
@@ -97,11 +99,13 @@ export default function Toolbar({ editor, onAi }) {
     setShowHighlight(false)
     setShowTableGrid(false)
     setShowBlockMenu(false)
+    setShowFontSize(false)
+    setShowFontFamily(false)
   }
 
   return (
     <div className="toolbar">
-      {(showTextColor || showHighlight || showTableGrid || showBlockMenu) && (
+      {(showTextColor || showHighlight || showTableGrid || showBlockMenu || showFontSize || showFontFamily) && (
         <div className="overlay" onClick={closePopovers} />
       )}
 
@@ -140,39 +144,84 @@ export default function Toolbar({ editor, onAi }) {
       </div>
       <div className="divider" />
 
-      {/* 字号 + 字体 */}
-      <select
-        className="tb-select tb-style-select"
-        title="字号"
-        value={editor.getAttributes('textStyle').fontSize || ''}
-        onChange={(e) => {
-          const v = e.target.value
-          editor.chain().focus().setMark('textStyle', { fontSize: v || null }).run()
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <option value="">字号</option>
-        {['12', '14', '16', '18', '20', '24', '28', '32'].map((s) => (
-          <option key={s} value={`${s}px`}>{s}</option>
-        ))}
-      </select>
-      <select
-        className="tb-select tb-style-select"
-        title="字体"
-        value={editor.getAttributes('textStyle').fontFamily || ''}
-        onChange={(e) => {
-          const v = e.target.value
-          editor.chain().focus().setMark('textStyle', { fontFamily: v || null }).run()
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <option value="">字体</option>
-        <option value="serif, 'Songti SC', 'SimSun'">宋体</option>
-        <option value="sans-serif, 'PingFang SC', 'Microsoft YaHei'">黑体</option>
-        <option value="'Kaiti SC', 'KaiTi', serif">楷体</option>
-        <option value="'STFangsong', 'FangSong', serif">仿宋</option>
-        <option value="'Georgia', 'Times New Roman', serif">衬线</option>
-      </select>
+      {/* 字号 + 字体（自定义下拉，风格统一） */}
+      <div className="menu-wrap">
+        <button
+          className="tb-block-btn tb-font-btn"
+          title="字号"
+          onClick={() => { setShowFontSize(!showFontSize); setShowFontFamily(false); setShowBlockMenu(false); setShowTextColor(false); setShowHighlight(false) }}
+        >
+          {editor.getAttributes('textStyle').fontSize ? Number.parseFloat(editor.getAttributes('textStyle').fontSize) : '字号'}
+          <Icon name="chevronDown" size={12} />
+        </button>
+        {showFontSize && (
+          <div className="menu font-menu" onClick={(e) => e.stopPropagation()}>
+            <button
+              className={`menu-item${!editor.getAttributes('textStyle').fontSize ? ' active' : ''}`}
+              onClick={() => { editor.chain().focus().setMark('textStyle', { fontSize: null }).run(); setShowFontSize(false) }}
+            >
+              <span>默认</span>
+              {!editor.getAttributes('textStyle').fontSize && <span className="menu-item-check">✓</span>}
+            </button>
+            {['12', '14', '16', '18', '20', '24', '28', '32'].map((s) => {
+              const cur = editor.getAttributes('textStyle').fontSize
+              return (
+                <button
+                  key={s}
+                  className={`menu-item${cur === `${s}px` ? ' active' : ''}`}
+                  onClick={() => { editor.chain().focus().setMark('textStyle', { fontSize: `${s}px` }).run(); setShowFontSize(false) }}
+                >
+                  <span>{s}</span>
+                  {cur === `${s}px` && <span className="menu-item-check">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <div className="menu-wrap">
+        <button
+          className="tb-block-btn tb-font-btn tb-font-btn-wide"
+          title="字体"
+          onClick={() => { setShowFontFamily(!showFontFamily); setShowFontSize(false); setShowBlockMenu(false); setShowTextColor(false); setShowHighlight(false) }}
+        >
+          {(() => {
+            const fam = editor.getAttributes('textStyle').fontFamily || ''
+            if (!fam) return '字体'
+            if (fam.includes('Songti') || fam.includes('SimSun')) return '宋体'
+            if (fam.includes('Kaiti') || fam.includes('KaiTi')) return '楷体'
+            if (fam.includes('FangSong') || fam.includes('Fangsong')) return '仿宋'
+            if (fam.includes('Georgia')) return '衬线'
+            return '黑体'
+          })()}
+          <Icon name="chevronDown" size={12} />
+        </button>
+        {showFontFamily && (
+          <div className="menu font-menu" onClick={(e) => e.stopPropagation()}>
+            {[
+              ['', '默认'],
+              ["serif, 'Songti SC', 'SimSun'", '宋体'],
+              ["sans-serif, 'PingFang SC', 'Microsoft YaHei'", '黑体'],
+              ["'Kaiti SC', 'KaiTi', serif", '楷体'],
+              ["'STFangsong', 'FangSong', serif", '仿宋'],
+              ["'Georgia', 'Times New Roman', serif", '衬线'],
+            ].map(([v, label]) => {
+              const cur = editor.getAttributes('textStyle').fontFamily || ''
+              return (
+                <button
+                  key={label}
+                  className={`menu-item${cur === v ? ' active' : ''}`}
+                  style={{ fontFamily: v || undefined }}
+                  onClick={() => { editor.chain().focus().setMark('textStyle', { fontFamily: v || null }).run(); setShowFontFamily(false) }}
+                >
+                  <span>{label}</span>
+                  {cur === v && <span className="menu-item-check">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <TB icon="bold" title="加粗 (⌘B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
       <TB icon="italic" title="斜体 (⌘I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
