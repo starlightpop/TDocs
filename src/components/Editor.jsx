@@ -207,10 +207,16 @@ const PagePadExtension = Extension.create({
               if (!meta.pairs?.length) return DecorationSet.empty
               const decos = []
               for (const p of meta.pairs) {
-                // prev 块底部留白 = 动态计算（撑满整页）；next 块顶部固定留白
+                // 页尾块底部留白：普通块用 padding；代码块/引用块用 margin（避免背景撑满）；空段不撑
+                const node = tr.doc.nodeAt(p.prevFrom)
+                const isBox = node && (node.type.name === 'codeBlock' || node.type.name === 'blockquote')
+                const isEmpty = node && node.textContent.trim() === ''
+                const style = p.prevPad != null && !isEmpty
+                  ? (isBox ? `margin-bottom: ${p.prevPad}px` : `padding-bottom: ${p.prevPad}px`)
+                  : ''
                 decos.push(Decoration.node(p.prevFrom, p.prevTo, {
-                  class: 'page-pad-bottom',
-                  style: p.prevPad != null ? `padding-bottom: ${p.prevPad}px` : '',
+                  class: isEmpty ? '' : (isBox ? 'page-pad-bottom-box' : 'page-pad-bottom'),
+                  style,
                 }))
                 if (p.nextFrom != null) {
                   decos.push(Decoration.node(p.nextFrom, p.nextTo, { class: 'page-pad-top' }))
