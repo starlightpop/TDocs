@@ -19,7 +19,7 @@ const BLOCK_ITEMS = [
   ['h4', '标题 4'], ['h5', '标题 5'], ['h6', '标题 6'],
 ]
 
-export default function BubbleBar({ editor, pos }) {
+export default function BubbleBar({ editor, pos, onAi }) {
   const [hoverMenu, setHoverMenu] = useState(null) // 'block' | 'color' | 'align'
   const closeTimer = useRef(null)
 
@@ -168,6 +168,14 @@ export default function BubbleBar({ editor, pos }) {
         <button className={`bm-btn${editor.isActive('link') ? ' active' : ''}`} title="插入/移除链接" onClick={setLink}>
           <Icon name="link" size={15} />
         </button>
+        {onAi && (
+          <>
+            <div className="bm-sep" />
+            <button className="bm-btn bm-ai" title="AI 改写选中内容" onClick={() => onAi?.()}>
+              <Icon name="sparkle" size={15} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

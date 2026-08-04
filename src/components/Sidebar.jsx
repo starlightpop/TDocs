@@ -51,26 +51,22 @@ export default function Sidebar({
     { label: '打开', icon: <Icon name="doc" size={15} />, action: () => onSelect(doc.id) },
     { label: '重命名', icon: <Icon name="edit" size={15} />, action: () => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) } },
     { sep: true },
-    ...moveItems(doc),
+    // 移动到：子菜单列出所有文件夹；移出分组：仅已在分组内时显示
+    {
+      label: '移动到',
+      icon: <Icon name="folder" size={15} />,
+      submenu: groups.map((g) => ({
+        label: g.name,
+        icon: <Icon name="folder" size={14} />,
+        action: () => onMoveDoc(doc.id, g.id),
+      })),
+    },
+    ...(doc.group
+      ? [{ label: '移出分组', icon: <Icon name="doc" size={15} />, action: () => onMoveDoc(doc.id, '') }]
+      : []),
     { sep: true },
     { label: '删除', icon: <Icon name="trash" size={15} />, danger: true, action: () => onDelete(doc) },
   ]
-
-  const moveItems = (doc) => {
-    const items = []
-    if (doc.group) {
-      items.push({ label: '移到：未分组', icon: <Icon name="doc" size={15} />, action: () => onMoveDoc(doc.id, '') })
-    }
-    for (const g of groups) {
-      if (g.id !== doc.group) {
-        items.push({ label: `移到：${g.name}`, icon: <Icon name="folder" size={15} />, action: () => onMoveDoc(doc.id, g.id) })
-      }
-    }
-    if (!doc.group && groups.length === 0) {
-      items.push({ label: '新建分组…', icon: <Icon name="folder" size={15} />, action: onAddGroup })
-    }
-    return items
-  }
 
   const renderDocItem = (doc) => (
     <div key={doc.id} className="doc-item-wrap">

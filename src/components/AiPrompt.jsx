@@ -33,6 +33,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
     }
     setLoading(true)
     setError('')
+    const started = Date.now()
     try {
       const answer = await callLLM(cfg, [
         { role: 'system', content: AI_SYSTEM_PROMPT },
@@ -40,13 +41,15 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
       ])
       const html = sanitizeHtml(cleanLLMOutput(answer))
       if (selection && editor) {
+        // 选中 → 替换选中文字
         editor.chain().focus().insertContentAt({ from: selection.from, to: selection.to }, html).run()
       } else {
-        editor.chain().focus().insertContent(html).run()
+        // 未选中 → 默认改写全文
+        editor.chain().focus().setContent(html, true).run()
       }
       onClose()
     } catch (e) {
-      setError(e.message || String(e))
+      setError(`${e.message || String(e)}（耗时 ${Math.round((Date.now() - started) / 1000)}s）`)
     } finally {
       setLoading(false)
     }
@@ -74,7 +77,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
         className={`ai-prompt-input${text.trim() ? ' filled' : ''}`}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={defaultText || '输入改写指令，例如：润色这段文字…'}
+        placeholder={defaultText ? `改写选中内容：${defaultText.slice(0, 40)}…` : '输入改写指令（未选中文字时将改写整篇文档）'}
         rows={2}
         autoFocus
         onKeyDown={(e) => {

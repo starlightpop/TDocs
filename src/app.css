@@ -1061,20 +1061,42 @@ html.platform-mac .topbar .menu {
   margin: 0.2em 0;
 }
 .editor-content pre {
+  position: relative;
   background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 0;
   font-family: var(--font-mono);
   font-size: 0.88em;
   line-height: 1.6;
   overflow-x: auto;
 }
 .editor-content pre code {
+  display: block;
   background: none;
-  padding: 0;
+  padding: 14px 16px 14px 50px;
+  min-width: max-content;
   color: inherit;
   font-size: inherit;
+}
+/* 代码块行号列 */
+.code-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 38px;
+  padding: 14px 0;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  line-height: 1.6;
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+  overflow: hidden;
 }
 .editor-content code {
   background: var(--surface-3);
@@ -1633,6 +1655,39 @@ html.platform-mac .topbar .menu {
 .context-menu .menu-item-shortcut {
   font-size: 10.5px;
   padding-left: 10px;
+}
+/* 子菜单（移动到） */
+.ctx-item {
+  position: relative;
+}
+.ctx-item .menu-item {
+  width: 100%;
+}
+.ctx-item.danger .menu-item,
+.ctx-item.danger .menu-item span {
+  color: var(--danger);
+}
+.ctx-item.disabled .menu-item {
+  opacity: 0.4;
+  cursor: default;
+}
+.menu-item-arrow {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--text-3);
+}
+.ctx-submenu {
+  top: -6px;
+  left: calc(100% - 4px);
+  right: auto;
+  min-width: 150px;
+  z-index: 610;
+}
+.ctx-submenu-empty {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 .menu-sep {
   height: 1px;
