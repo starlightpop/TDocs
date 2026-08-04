@@ -51,8 +51,8 @@ html.platform-mac .topbar .menu {
 }
 
 .doc-title-input {
-  flex: 1;
-  max-width: 480px;
+  flex: 0 1 280px;  /* 固定伸缩上限，不撑满中部，留出可拖拽空白 */
+  max-width: 280px;
   margin-left: 8px;
   font-size: 16px;
   font-weight: 600;

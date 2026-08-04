@@ -11,7 +11,13 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     // 仅 macOS 隐藏原生标题栏（保留左上角红绿灯），Windows/Linux 用系统默认标题栏
-    ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
+    ...(isMac
+      ? {
+          titleBarStyle: 'hiddenInset',
+          // 红绿灯垂直居中于顶栏（topbar 高 56，中心 28；默认位置偏上）
+          trafficLightPosition: { x: 16, y: 22 },
+        }
+      : {}),
     backgroundColor: '#f5f6f8',
     show: false,
     webPreferences: {

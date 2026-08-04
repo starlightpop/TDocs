@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import logoUrl from './assets/logo.svg'
 import Sidebar from './components/Sidebar.jsx'
 import Toolbar from './components/Toolbar.jsx'
 import Editor from './components/Editor.jsx'
@@ -392,7 +393,7 @@ export default function App() {
           <Icon name="sidebar" />
         </button>
         <div className="brand">
-          <img src="/logo.svg" alt="TDocs" />
+          <img src={logoUrl} alt="TDocs" />
           <span>TDocs</span>
         </div>
         <input
