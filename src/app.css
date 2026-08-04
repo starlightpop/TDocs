@@ -878,26 +878,11 @@ html.platform-mac .topbar .menu {
 
 /* 分页模式（A4/B5）：Word 式分页显示 */
 .page.paged {
-  /* WPS 式：A4/B5 页面固定为白纸 + 浅色内容（深色 UI 下也是白纸），上下 96px 对称边距 */
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --surface-3: #e7eaf0;
-  --text: #1c1e21;
-  --text-2: #4b5563;
-  --text-3: #8a919c;
-  --border: #dde1e8;
-  --border-strong: #c9cfd9;
-  --accent: #4f6ef7;
-  --accent-hover: #3f5ce0;
-  --accent-soft: rgba(79, 110, 247, 0.12);
-  --selection: rgba(79, 110, 247, 0.2);
-  background: #ffffff;
-  color: #1c1e21;
-  border: 1px solid #c9cfd9;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 10px 36px rgba(0, 0, 0, 0.22);
+  /* A4/B5 = 固定大小的独立页面：颜色跟随主题（--page-bg），每页上下 96px 对称边距 */
   padding-top: 96px;
   padding-bottom: 96px;
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--page-shadow);
 }
 /* 分离页面留白：由 ProseMirror Decoration 类名驱动；
    用 padding 而非 margin，避免相邻外边距合并导致留白减半 */
@@ -935,6 +920,10 @@ html.platform-mac .topbar .menu {
   position: absolute;
   height: 22px;
   background: var(--bg-canvas);
+  box-sizing: border-box;
+  /* 左右竖线：与上下边框线闭合，每页视觉上独立成框 */
+  border-left: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border-strong);
 }
 .page-gap::before,
 .page-gap::after {
@@ -2437,30 +2426,6 @@ html.platform-mac .topbar .menu {
   color: var(--accent-text);
 }
 
-/* ---------- 代码块语法高亮（hljs，适配深色/浅色主题） ---------- */
-.editor-content code .hljs-comment,
-.editor-content code .hljs-quote { color: var(--text-3); font-style: italic; }
-.editor-content code .hljs-keyword,
-.editor-content code .hljs-selector-tag,
-.editor-content code .hljs-literal { color: #c678dd; }
-.editor-content code .hljs-string,
-.editor-content code .hljs-regexp,
-.editor-content code .hljs-addition { color: #98c379; }
-.editor-content code .hljs-number,
-.editor-content code .hljs-symbol,
-.editor-content code .hljs-variable { color: #d19a66; }
-.editor-content code .hljs-title,
-.editor-content code .hljs-title.function_,
-.editor-content code .hljs-section { color: #61afef; }
-.editor-content code .hljs-type,
-.editor-content code .hljs-built_in,
-.editor-content code .hljs-class .hljs-title { color: #e5c07b; }
-.editor-content code .hljs-attr,
-.editor-content code .hljs-attribute,
-.editor-content code .hljs-params { color: #abb2bf; }
-.editor-content code .hljs-meta,
-.editor-content code .hljs-deletion { color: #e06c75; }
-
 /* 代码块语言切换按钮 */
 .tb-lang-btn {
   min-width: 78px;
@@ -2542,23 +2507,35 @@ html.platform-mac .topbar .menu {
   color: #f16063;
 }
 
-/* 白纸页面（分页模式）上的语法高亮：浅色底用深色调，保证可读 */
-.page.paged .editor-content code .hljs-keyword,
-.page.paged .editor-content code .hljs-selector-tag,
-.page.paged .editor-content code .hljs-literal { color: #7c3aed; }
-.page.paged .editor-content code .hljs-string,
-.page.paged .editor-content code .hljs-regexp,
-.page.paged .editor-content code .hljs-addition { color: #15803d; }
-.page.paged .editor-content code .hljs-number,
-.page.paged .editor-content code .hljs-symbol,
-.page.paged .editor-content code .hljs-variable { color: #b45309; }
-.page.paged .editor-content code .hljs-title,
-.page.paged .editor-content code .hljs-section { color: #1d4ed8; }
-.page.paged .editor-content code .hljs-type,
-.page.paged .editor-content code .hljs-built_in { color: #a16207; }
-.page.paged .editor-content code .hljs-attr,
-.page.paged .editor-content code .hljs-attribute { color: #334155; }
-.page.paged .editor-content code .hljs-comment,
-.page.paged .editor-content code .hljs-quote { color: #64748b; }
-.page.paged .editor-content code .hljs-meta,
-.page.paged .editor-content code .hljs-deletion { color: #b91c1c; }
+
+/* ---------- 代码块语法高亮（中性色，深浅主题通用） ---------- */
+.editor-content code .hljs-comment,
+.editor-content code .hljs-quote { color: #64748b; font-style: italic; }
+.editor-content code .hljs-keyword,
+.editor-content code .hljs-selector-tag,
+.editor-content code .hljs-literal { color: #7c3aed; }
+.editor-content code .hljs-string,
+.editor-content code .hljs-regexp,
+.editor-content code .hljs-addition { color: #15803d; }
+.editor-content code .hljs-number,
+.editor-content code .hljs-symbol,
+.editor-content code .hljs-variable { color: #b45309; }
+.editor-content code .hljs-title,
+.editor-content code .hljs-title.function_,
+.editor-content code .hljs-section { color: #1d4ed8; }
+.editor-content code .hljs-type,
+.editor-content code .hljs-built_in,
+.editor-content code .hljs-class .hljs-title { color: #a16207; }
+.editor-content code .hljs-attr,
+.editor-content code .hljs-attribute,
+.editor-content code .hljs-params { color: #334155; }
+.editor-content code .hljs-meta,
+.editor-content code .hljs-deletion { color: #b91c1c; }
+
+/* 代码块语言切换按钮 */
+.tb-lang-btn {
+  min-width: 78px;
+}
+.lang-menu {
+  min-width: 120px;
+}
