@@ -878,7 +878,24 @@ html.platform-mac .topbar .menu {
 
 /* 分页模式（A4/B5）：Word 式分页显示 */
 .page.paged {
-  /* WPS 式页边距：上下统一 96px，首页与后续页一致 */
+  /* WPS 式：A4/B5 页面固定为白纸 + 浅色内容（深色 UI 下也是白纸），上下 96px 对称边距 */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e7eaf0;
+  --text: #1c1e21;
+  --text-2: #4b5563;
+  --text-3: #8a919c;
+  --border: #dde1e8;
+  --border-strong: #c9cfd9;
+  --accent: #4f6ef7;
+  --accent-hover: #3f5ce0;
+  --accent-soft: rgba(79, 110, 247, 0.12);
+  --selection: rgba(79, 110, 247, 0.2);
+  background: #ffffff;
+  color: #1c1e21;
+  border: 1px solid #c9cfd9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 10px 36px rgba(0, 0, 0, 0.22);
   padding-top: 96px;
   padding-bottom: 96px;
 }
@@ -1038,8 +1055,8 @@ html.platform-mac .topbar .menu {
   border-radius: var(--radius-md);
   padding: 0;
   font-family: var(--font-mono);
-  font-size: 0.88em;
-  line-height: 1.6;
+  font-size: 0.85em;
+  line-height: 1.5;
   overflow-x: auto;
 }
 .editor-content pre code {
@@ -2524,3 +2541,24 @@ html.platform-mac .topbar .menu {
 .term-out.err {
   color: #f16063;
 }
+
+/* 白纸页面（分页模式）上的语法高亮：浅色底用深色调，保证可读 */
+.page.paged .editor-content code .hljs-keyword,
+.page.paged .editor-content code .hljs-selector-tag,
+.page.paged .editor-content code .hljs-literal { color: #7c3aed; }
+.page.paged .editor-content code .hljs-string,
+.page.paged .editor-content code .hljs-regexp,
+.page.paged .editor-content code .hljs-addition { color: #15803d; }
+.page.paged .editor-content code .hljs-number,
+.page.paged .editor-content code .hljs-symbol,
+.page.paged .editor-content code .hljs-variable { color: #b45309; }
+.page.paged .editor-content code .hljs-title,
+.page.paged .editor-content code .hljs-section { color: #1d4ed8; }
+.page.paged .editor-content code .hljs-type,
+.page.paged .editor-content code .hljs-built_in { color: #a16207; }
+.page.paged .editor-content code .hljs-attr,
+.page.paged .editor-content code .hljs-attribute { color: #334155; }
+.page.paged .editor-content code .hljs-comment,
+.page.paged .editor-content code .hljs-quote { color: #64748b; }
+.page.paged .editor-content code .hljs-meta,
+.page.paged .editor-content code .hljs-deletion { color: #b91c1c; }
