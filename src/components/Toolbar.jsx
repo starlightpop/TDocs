@@ -45,6 +45,17 @@ const HIGHLIGHT_COLORS = [
   '#a8e6d2', '#d3f2b6', '#fff3bf', '#c3fae8', '#d0ebff', '#e7e9ee',
   '#f5c6aa', '#b197fc', '#63e6be',
 ]
+// 代码块支持的语言（与 lowlight 注册一致）
+const CODE_LANGS = [
+  ['plaintext', '纯文本'],
+  ['c', 'C'],
+  ['cpp', 'C++'],
+  ['java', 'Java'],
+  ['python', 'Python'],
+  ['rust', 'Rust'],
+  ['matlab', 'MATLAB'],
+  ['javascript', 'JavaScript'],
+]
 
 function TB({ icon, title, active, disabled, onClick }) {
   return (
@@ -68,6 +79,7 @@ export default function Toolbar({ editor, onAi }) {
   const [showBlockMenu, setShowBlockMenu] = useState(false)
   const [showFontSize, setShowFontSize] = useState(false)
   const [showFontFamily, setShowFontFamily] = useState(false)
+  const [showLangMenu, setShowLangMenu] = useState(false)
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
 
@@ -126,6 +138,7 @@ export default function Toolbar({ editor, onAi }) {
     setShowBlockMenu(false)
     setShowFontSize(false)
     setShowFontFamily(false)
+    setShowLangMenu(false)
   }
 
   return (
@@ -381,6 +394,33 @@ export default function Toolbar({ editor, onAi }) {
           <TB icon="plus" title="添加列" onClick={() => editor.chain().focus().addColumnAfter().run()} />
           <TB icon="trash" title="删除表格" onClick={() => editor.chain().focus().deleteTable().run()} />
         </>
+      )}
+      {/* 代码块语言选择（代码块激活时显示） */}
+      {editor.isActive('codeBlock') && (
+        <div className="menu-wrap">
+          <button
+            className="tb-block-btn tb-lang-btn"
+            title="代码语言（决定语法高亮）"
+            onClick={() => { setShowLangMenu(!showLangMenu); setShowBlockMenu(false); setShowFontSize(false); setShowFontFamily(false) }}
+          >
+            {CODE_LANGS.find(([v]) => v === (editor.getAttributes('codeBlock').language || 'plaintext'))?.[1] || '语言'}
+            <Icon name="chevronDown" size={13} />
+          </button>
+          {showLangMenu && (
+            <div className="menu lang-menu" onClick={(e) => e.stopPropagation()}>
+              {CODE_LANGS.map(([v, label]) => (
+                <button
+                  key={v}
+                  className={`menu-item${(editor.getAttributes('codeBlock').language || 'plaintext') === v ? ' active' : ''}`}
+                  onClick={() => { editor.chain().focus().updateAttributes('codeBlock', { language: v }).run(); setShowLangMenu(false) }}
+                >
+                  <span>{label}</span>
+                  {(editor.getAttributes('codeBlock').language || 'plaintext') === v && <span className="menu-item-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       <div className="divider" />
       <TB icon="eraser" title="清除格式" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} />

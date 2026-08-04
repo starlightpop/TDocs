@@ -4,6 +4,9 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { Node, Mark, mergeAttributes } from '@tiptap/core'
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
+import { createLowlight, common } from 'lowlight'
+import matlab from 'highlight.js/lib/languages/matlab'
 import Underline from '@tiptap/extension-underline'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
@@ -82,6 +85,26 @@ const Subscript = Mark.create({
   },
 })
 
+// ---------- AI 内联 diff 标记（span class 会被 PM 丢弃，必须用 mark 承载样式） ----------
+const AiOldMark = Mark.create({
+  name: 'aiOld',
+  inclusive: false,
+  excludes: '',
+  parseHTML: () => [
+    { tag: 'span', getAttrs: (el) => (el.classList && el.classList.contains('ai-inline-old') ? {} : false) },
+  ],
+  renderHTML: () => ['span', { class: 'ai-inline-old' }, 0],
+})
+const AiNewMark = Mark.create({
+  name: 'aiNew',
+  inclusive: false,
+  excludes: '',
+  parseHTML: () => [
+    { tag: 'span', getAttrs: (el) => (el.classList && el.classList.contains('ai-inline-new') ? {} : false) },
+  ],
+  renderHTML: () => ['span', { class: 'ai-inline-new' }, 0],
+})
+
 // ---------- AI 改写选区保持高亮（窗口打开时选中范围仍可见） ----------
 const aiSelKey = new PluginKey('aiSelectionHighlight')
 const AiSelPlugin = new Plugin({
@@ -100,45 +123,22 @@ const AiSelPlugin = new Plugin({
   },
 })
 
-// ---------- 代码块：带默认行号（自定义 NodeView，gutter 与内容同步） ----------
-const CodeBlock = Node.create({
-  name: 'codeBlock',
-  group: 'block',
-  content: 'text*',
-  marks: '',
-  code: true,
-  defining: true,
-  addKeyboardShortcuts() {
-    return { 'Mod-Alt-c': () => this.editor.commands.toggleCodeBlock() }
-  },
-  parseHTML() {
-    return [{ tag: 'pre' }]
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['pre', mergeAttributes(HTMLAttributes), ['code', 0]]
-  },
-  addCommands() {
-    return {
-      setCodeBlock:
-        (attributes) =>
-        ({ commands }) =>
-          commands.setNode(this.name, attributes),
-      toggleCodeBlock:
-        (attributes) =>
-        ({ commands }) =>
-          commands.toggleNode(this.name, 'paragraph', attributes),
-      setCodeBlockAt:
-        (position, attributes) =>
-        ({ state, dispatch, chain }) => {
-          const node = state.doc.nodeAt(position)
-          if (!node) return false
-          if (node.type.name === this.name) {
-            return chain().setNodeAt(position, 'paragraph').run()
-          }
-          return chain().setNodeAt(position, this.name, attributes).run()
-        },
-    }
-  },
+// ---------- 代码块：语法高亮（lowlight）+ 默认行号（自定义 NodeView） ----------
+const lowlight = createLowlight(common)
+lowlight.register('matlab', matlab)
+// 可用的语言列表（供语言选择菜单）
+const CODE_LANGUAGES = [
+  ['plaintext', '纯文本'],
+  ['c', 'C'],
+  ['cpp', 'C++'],
+  ['java', 'Java'],
+  ['python', 'Python'],
+  ['rust', 'Rust'],
+  ['matlab', 'MATLAB'],
+  ['javascript', 'JavaScript'],
+]
+
+const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
   addNodeView() {
     return ({ node }) => {
       const pre = document.createElement('pre')
@@ -147,8 +147,7 @@ const CodeBlock = Node.create({
       const code = document.createElement('code')
       pre.append(gutter, code)
       const render = () => {
-        const lines = (node.textContent || '').split('\n')
-        gutter.textContent = lines.map((_, i) => i + 1).join('\n')
+        gutter.textContent = (node.textContent || '').split('\n').map((_, i) => i + 1).join('\n')
       }
       render()
       return { dom: pre, contentDOM: code, update: (n) => { node = n; render(); return true } }
@@ -232,14 +231,6 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const [breakOffsets, setBreakOffsets] = useState([])
   const wrapRef = useRef(null)
   const pageMetaRef = useRef({ top: 64, left: 0, width: 0 })
-  // 段落悬停手柄（飞书式“大 T”）：{ top, left } 相对视口
-  const [hoverBlock, setHoverBlock] = useState(null)
-  const [blockMenuOpen, setBlockMenuOpen] = useState(false)
-  const hoverBlockRef = useRef(null)
-  const blockMenuOpenRef = useRef(false)
-  const handleRafRef = useRef(0)
-  const hoverOpenTimerRef = useRef(null)
-  const hoverCloseTimerRef = useRef(null)
   // 选中文字浮动条位置
   const [bubblePos, setBubblePos] = useState(null)
   const canvasRef = useRef(null)
@@ -273,6 +264,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       FontStyleExt,
       Superscript,
       Subscript,
+      AiOldMark,
+      AiNewMark,
       AiSelPlugin,
     ],
     [],
@@ -590,151 +583,34 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     setBubblePos({ top: rect.top, left: rect.left + rect.width / 2 })
   }
 
-  // 段落悬停：定位当前 hover 的内容块，显示左侧手柄
-  const updateHandle = () => {
-    const block = hoverBlockRef.current
-    if (!block) return
-    const rect = block.getBoundingClientRect()
-    setHoverBlock({ top: rect.top, left: rect.left })
-  }
-
-  // rAF 节流：同一块连续 mousemove 不反复 setState
-  const scheduleHandle = () => {
-    if (handleRafRef.current) return
-    handleRafRef.current = requestAnimationFrame(() => {
-      handleRafRef.current = 0
-      updateHandle()
-    })
-  }
-
-  const closeMenuSoon = () => {
-    clearTimeout(hoverOpenTimerRef.current)
-    clearTimeout(hoverCloseTimerRef.current)
-    hoverCloseTimerRef.current = setTimeout(() => {
-      if (blockMenuOpenRef.current) {
-        blockMenuOpenRef.current = false
-        setBlockMenuOpen(false)
-      }
-    }, 180)
-  }
-
-  const onCanvasMove = (e) => {
-    // 手柄/菜单自身不参与块检测
-    if (e.target.closest?.('.para-handle, .para-handle-menu')) return
-    const content = wrapRef.current?.querySelector('.editor-content')
-    if (!content || !content.contains(e.target)) {
-      clearTimeout(hoverOpenTimerRef.current)
-      clearTimeout(hoverCloseTimerRef.current)
-      hoverBlockRef.current = null
-      if (blockMenuOpenRef.current) { blockMenuOpenRef.current = false; setBlockMenuOpen(false) }
-      setHoverBlock(null)
-      return
-    }
-    const block = e.target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre')
-    // 飞书式：鼠标在内容区移动，手柄持续跟随当前行；空白处不清空，保持上一个块直到碰到新块
-    if (!block) {
-      scheduleHandle()
-      return
-    }
-    if (block !== hoverBlockRef.current) {
-      hoverBlockRef.current = block
-      setBlockMenuOpen(false)
-      blockMenuOpenRef.current = false
-      clearTimeout(hoverOpenTimerRef.current)
-      clearTimeout(hoverCloseTimerRef.current)
-      updateHandle()
-    } else {
-      scheduleHandle()
-      // 鼠标在普通内容上（不在菜单内）→ 延迟收起菜单
-      if (blockMenuOpenRef.current && !e.target.closest('.para-handle-menu')) {
-        closeMenuSoon()
-      }
-    }
-  }
-
-  // 手柄菜单：设置块级别 / 删除块
-  const handleBlockAction = (level) => {
-    const block = hoverBlockRef.current
-    if (!block || !editor) return
-    const { view } = editor
-    const pos = view.posAtDOM(block, 0)
-    if (pos == null) return
-    if (level === null) {
-      const node = view.state.doc.nodeAt(pos)
-      const size = node ? node.nodeSize : Math.max(block.textContent.length + 2, 2)
-      view.dispatch(view.state.tr.delete(pos, pos + size))
-    } else {
-      const chain = editor.chain().focus()
-      if (level === 0) chain.setNode('paragraph')
-      else chain.setNode('heading', { level })
-      chain.run()
-    }
-    setBlockMenuOpen(false)
-    setHoverBlock(null)
-  }
-
   return (
     <div
       className="canvas"
       ref={canvasRef}
-      onMouseMove={onCanvasMove}
-      onScroll={() => { updateHandle(); updateBubble() }}
-      onMouseLeave={() => setHoverBlock(null)}
+      onMouseDown={(e) => {
+        // 点击编辑器内容外的空白：光标移到点击处（可退出代码块）
+        const content = wrapRef.current?.querySelector('.editor-content')
+        if (!editor || !content || content.contains(e.target)) return
+        if (e.target.closest?.('.bubble-wrap, .ai-accept-card, .menu, .overlay')) return
+        if (e.button !== 0) return
+        const res = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
+        if (res?.pos != null) {
+          const node = editor.state.doc.nodeAt(res.pos)
+          // 落在代码块内且点在内容区外：失焦退出编辑
+          if (node?.type.name === 'codeBlock') {
+            editor.commands.blur()
+            return
+          }
+          editor.chain().focus().setTextSelection(res.pos).run()
+        }
+      }}
+      onScroll={updateBubble}
       onContextMenu={(e) => {
         if (!editor) return
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY })
       }}
     >
-      {/* 段落悬停手柄（飞书式大 T）：始终显示，菜单在右侧展开不替换它 */}
-      {hoverBlock && (
-        <div
-          className={`para-handle${blockMenuOpen ? ' active' : ''}`}
-          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 }}
-          onMouseEnter={() => {
-            clearTimeout(hoverCloseTimerRef.current)
-            hoverOpenTimerRef.current = setTimeout(() => {
-              blockMenuOpenRef.current = true
-              setBlockMenuOpen(true)
-            }, 250)
-          }}
-          onMouseLeave={closeMenuSoon}
-        >
-          <span className="para-handle-t">T</span>
-          <span className="para-handle-dots"><Icon name="dots" size={12} /></span>
-        </div>
-      )}
-      {hoverBlock && blockMenuOpen && (
-        <div
-          className="menu para-handle-menu"
-          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 + 46 }}
-          onMouseEnter={() => {
-            clearTimeout(hoverOpenTimerRef.current)
-            clearTimeout(hoverCloseTimerRef.current)
-          }}
-          onMouseLeave={closeMenuSoon}
-        >
-          {[['paragraph', '正文'], ['h1', '标题 1'], ['h2', '标题 2'], ['h3', '标题 3'], ['h4', '标题 4'], ['h5', '标题 5'], ['h6', '标题 6']].map(([v, label]) => {
-            const active = v === 'paragraph'
-              ? !['1', '2', '3', '4', '5', '6'].some((l) => editor?.isActive('heading', { level: Number(l) }))
-              : editor?.isActive('heading', { level: Number(v[1]) })
-            return (
-              <button
-                key={v}
-                className={`menu-item${active ? ' active' : ''}`}
-                onClick={() => handleBlockAction(v === 'paragraph' ? 0 : Number(v[1]))}
-              >
-                <span>{label}</span>
-                {active && <span className="menu-item-check">✓</span>}
-              </button>
-            )
-          })}
-          <div className="menu-sep" />
-          <button className="menu-item danger" onClick={() => handleBlockAction(null)}>
-            <span>删除此块</span>
-          </button>
-        </div>
-      )}
       <BubbleBar editor={editor} pos={bubblePos} onAi={onAi} />
       {/* AI 内联 diff 接受卡片 */}
       {aiInline && <AiAcceptCard editor={editor} diff={aiInline} onResolve={onResolveInline} />}

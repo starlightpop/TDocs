@@ -732,54 +732,6 @@ html.platform-mac .topbar .menu {
   position: relative;  /* 段落手柄定位基准 */
 }
 
-/* ---------- 段落悬停手柄（飞书式“大 T”） ---------- */
-.para-handle {
-  position: fixed;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px 4px 7px;
-  border-radius: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  color: var(--text-2);
-  cursor: pointer;
-  z-index: 120;
-  transition: color 0.12s, border-color 0.12s, box-shadow 0.12s;
-  user-select: none;
-}
-.para-handle:hover,
-.para-handle.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
-}
-.para-handle-t {
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--accent);
-}
-.para-handle-dots {
-  display: inline-flex;
-  align-items: center;
-  opacity: 0.7;
-  color: var(--text-3);
-}
-.para-handle:hover .para-handle-dots {
-  opacity: 1;
-}
-.para-handle-menu {
-  position: fixed;
-  min-width: 130px;
-  width: max-content;
-  z-index: 130;
-}
-.para-handle-menu .menu-item {
-  font-size: 12.5px;
-}
-
 /* ---------- 选中文字浮动工具条（飞书式） ---------- */
 .bubble-wrap {
   position: fixed;
@@ -832,8 +784,8 @@ html.platform-mac .topbar .menu {
 .bm-btn svg {
   transition: transform 0.18s;
 }
-/* 只旋转箭头（最后一个 svg），图标本体（如对齐图标）不旋转 */
-.bm-btn.open svg:last-child {
+/* 只旋转箭头（按钮最后一个子元素 span 内的 svg），图标本体不旋转 */
+.bm-btn.open > span:last-child svg {
   transform: rotate(180deg);
 }
 .bm-t {
@@ -1076,6 +1028,7 @@ html.platform-mac .topbar .menu {
 }
 .editor-content pre {
   position: relative;
+  margin: 0.7em 0;  /* 上下对称间距，不贴页面边缘 */
   background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2459,4 +2412,36 @@ html.platform-mac .topbar .menu {
 }
 .ai-accept-ok {
   color: var(--accent-text);
+}
+
+/* ---------- 代码块语法高亮（hljs，适配深色/浅色主题） ---------- */
+.editor-content code .hljs-comment,
+.editor-content code .hljs-quote { color: var(--text-3); font-style: italic; }
+.editor-content code .hljs-keyword,
+.editor-content code .hljs-selector-tag,
+.editor-content code .hljs-literal { color: #c678dd; }
+.editor-content code .hljs-string,
+.editor-content code .hljs-regexp,
+.editor-content code .hljs-addition { color: #98c379; }
+.editor-content code .hljs-number,
+.editor-content code .hljs-symbol,
+.editor-content code .hljs-variable { color: #d19a66; }
+.editor-content code .hljs-title,
+.editor-content code .hljs-title.function_,
+.editor-content code .hljs-section { color: #61afef; }
+.editor-content code .hljs-type,
+.editor-content code .hljs-built_in,
+.editor-content code .hljs-class .hljs-title { color: #e5c07b; }
+.editor-content code .hljs-attr,
+.editor-content code .hljs-attribute,
+.editor-content code .hljs-params { color: #abb2bf; }
+.editor-content code .hljs-meta,
+.editor-content code .hljs-deletion { color: #e06c75; }
+
+/* 代码块语言切换按钮 */
+.tb-lang-btn {
+  min-width: 78px;
+}
+.lang-menu {
+  min-width: 120px;
 }

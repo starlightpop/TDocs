@@ -33,7 +33,6 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
   const [error, setError] = useState('')
   const [result, setResult] = useState(null) // { oldHtml, newHtml, parts: [{old, new}], ranges }
   const [accepted, setAccepted] = useState(null) // 'all' | Set<partIdx>
-  const [dragging, setDragging] = useState(null)
   const inputRef = useRef(null)
 
   const selectionHtml = useMemo(() => getSelectionHtml(editor, selection), [editor, selection])
@@ -109,21 +108,25 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
     if (mode === 'selection' || mode === 'all') onClose()
   }
 
-  // 拖拽窗口
+  // 拖拽窗口（用 ref 保存状态，避免合成事件/闭包失效）
+  const dragRef = useRef(null)
   const onDragStart = (e) => {
-    const rect = e.currentTarget.closest('.ai-prompt').getBoundingClientRect()
-    setDragging({ dx: e.clientX - rect.left, dy: e.clientY - rect.top, origLeft: rect.left, origTop: rect.top, rect })
+    if (e.target.closest('button, input, textarea')) return
+    const prompt = e.currentTarget.closest('.ai-prompt')
+    if (!prompt) return
+    const rect = prompt.getBoundingClientRect()
+    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, el: prompt }
     const onMove = (ev) => {
-      const el = e.currentTarget.closest('.ai-prompt')
-      el.style.left = `${ev.clientX - dragging.dx}px`
-      el.style.top = `${ev.clientY - dragging.dy}px`
-      el.style.transform = 'none'
-      el.style.marginLeft = '0'
+      const d = dragRef.current
+      if (!d) return
+      d.el.style.left = `${ev.clientX - d.dx}px`
+      d.el.style.top = `${ev.clientY - d.dy}px`
+      d.el.style.transform = 'none'
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
-      setDragging(null)
+      dragRef.current = null
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
