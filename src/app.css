@@ -22,6 +22,21 @@
   z-index: 30;
 }
 
+/* macOS 隐藏标题栏（hiddenInset）适配：
+   1. 整条顶栏作为窗口拖动区域（交互元素单独标记 no-drag）
+   2. 左侧让出红绿灯按钮的横向空间，避免 logo / 按钮与系统按钮重叠 */
+html.platform-mac .topbar {
+  -webkit-app-region: drag;
+  padding-left: 80px;
+  user-select: none;
+}
+html.platform-mac .topbar button,
+html.platform-mac .topbar input,
+html.platform-mac .topbar select,
+html.platform-mac .topbar .menu {
+  -webkit-app-region: no-drag;
+}
+
 .brand {
   display: flex;
   align-items: center;
