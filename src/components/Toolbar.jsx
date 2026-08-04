@@ -261,6 +261,16 @@ export default function Toolbar({ editor, onAi }) {
       <TB icon="italic" title="斜体 (⌘I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
       <TB icon="underline" title="下划线 (⌘U)" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />
       <TB icon="strike" title="删除线" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} />
+      <button
+        className={`tb-sup-sub${editor.isActive('superscript') ? ' active' : ''}`}
+        title="上标 (⌘⇧=)"
+        onClick={() => editor.chain().focus().toggleMark('superscript').run()}
+      >X²</button>
+      <button
+        className={`tb-sup-sub${editor.isActive('subscript') ? ' active' : ''}`}
+        title="下标 (⌘=)"
+        onClick={() => editor.chain().focus().toggleMark('subscript').run()}
+      >X₂</button>
 
       {/* 文字颜色 */}
       <div className="menu-wrap">

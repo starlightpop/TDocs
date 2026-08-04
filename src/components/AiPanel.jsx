@@ -2,7 +2,36 @@
 // 改写功能在浮动输入框 AiPrompt 中完成，不在此处
 import { useState } from 'react'
 import { Icon } from './Icons.jsx'
+import ContextMenu from './ContextMenu.jsx'
 import { loadApiConfig, saveApiConfig, callLLM } from '../lib/api.js'
+
+// 自建下拉（与全局菜单风格统一，跨平台一致）
+function SelectMenu({ value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const cur = options.find(([v]) => v === value)
+  return (
+    <div className="menu-wrap ai-select">
+      <button className="ai-select-btn" onClick={(e) => { e.stopPropagation(); setOpen(!open) }}>
+        <span className="ai-select-label">{cur ? cur[1] : '自定义…'}</span>
+        <Icon name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <div className="menu ai-select-menu" onClick={(e) => e.stopPropagation()}>
+          {options.map(([v, label]) => (
+            <button
+              key={v}
+              className={`menu-item${v === value ? ' active' : ''}`}
+              onClick={() => { onChange(v); setOpen(false) }}
+            >
+              <span>{label}</span>
+              {v === value && <span className="menu-item-check">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // 预设主流大模型厂商（均为 OpenAI 兼容接口，2026-08-04 联网核实；models 为各厂商当前主流可选模型）
 export const PROVIDERS = [
@@ -28,6 +57,12 @@ export default function AiPanel({ onClose }) {
   const [savedTip, setSavedTip] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null) // {ok, msg}
+  const [keyMenu, setKeyMenu] = useState(null)
+
+  const openKeyMenu = (e) => {
+    e.preventDefault()
+    setKeyMenu({ x: e.clientX, y: e.clientY })
+  }
 
   const pickProvider = (id) => {
     const p = PROVIDERS.find((x) => x.id === id)
@@ -78,13 +113,14 @@ export default function AiPanel({ onClose }) {
       </div>
 
       <div className="ai-cfg-fields">
+        {/* 厂商：自建下拉（与全局菜单统一，跨平台一致） */}
         <label>
           厂商
-          <select value={cfg.provider || 'custom'} onChange={(e) => pickProvider(e.target.value)}>
-            {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <SelectMenu
+            value={cfg.provider || 'custom'}
+            options={PROVIDERS.map((p) => [p.id, p.name])}
+            onChange={(v) => pickProvider(v)}
+          />
         </label>
         <label>
           接口地址（OpenAI 兼容）
@@ -101,7 +137,20 @@ export default function AiPanel({ onClose }) {
             value={cfg.apiKey}
             onChange={(e) => update({ apiKey: e.target.value })}
             placeholder="sk-..."
+            onContextMenu={openKeyMenu}
           />
+          {keyMenu && (
+            <ContextMenu
+              x={keyMenu.x}
+              y={keyMenu.y}
+              items={[
+                { label: '粘贴', icon: <Icon name="paste" size={15} />, action: async () => { const t = await navigator.clipboard.readText(); update({ apiKey: t }) } },
+                { label: '复制', icon: <Icon name="doc" size={15} />, action: () => { const el = document.querySelector('.ai-cfg-fields input[type=password]'); if (el) { el.select(); document.execCommand('copy') } } },
+                { label: '全选', icon: <Icon name="edit" size={15} />, action: () => { const el = document.querySelector('.ai-cfg-fields input[type=password]'); if (el) el.select() } },
+              ]}
+              onClose={() => setKeyMenu(null)}
+            />
+          )}
         </label>
         <label>
           模型名称
@@ -111,18 +160,11 @@ export default function AiPanel({ onClose }) {
             const inList = modelList.includes(cfg.model)
             return (
               <>
-                <select
+                <SelectMenu
                   value={inList ? cfg.model : '__custom__'}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') update({ model: '' })
-                    else update({ model: e.target.value })
-                  }}
-                >
-                  {modelList.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="__custom__">自定义…</option>
-                </select>
+                  options={[...modelList.map((m) => [m, m]), ['__custom__', '自定义…']]}
+                  onChange={(v) => update({ model: v === '__custom__' ? '' : v })}
+                />
                 {!inList && (
                   <input
                     value={cfg.model}

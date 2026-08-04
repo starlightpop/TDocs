@@ -3,7 +3,7 @@ import { useEditor, EditorContent, Extension } from '@tiptap/react'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, Mark, mergeAttributes } from '@tiptap/core'
 import Underline from '@tiptap/extension-underline'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
@@ -61,6 +61,42 @@ const FontStyleExt = TextStyle.extend({
         renderHTML: (attrs) => (attrs.fontFamily ? { style: `font-family: ${attrs.fontFamily}` } : {}),
       },
     }
+  },
+})
+
+// ---------- 上标 / 下标（图 2 功能） ----------
+const Superscript = Mark.create({
+  name: 'superscript',
+  parseHTML: () => [{ tag: 'sup' }],
+  renderHTML: () => ['sup', 0],
+  addKeyboardShortcuts() {
+    return { 'Mod-Shift-=': () => this.editor.commands.toggleMark('superscript') }
+  },
+})
+const Subscript = Mark.create({
+  name: 'subscript',
+  parseHTML: () => [{ tag: 'sub' }],
+  renderHTML: () => ['sub', 0],
+  addKeyboardShortcuts() {
+    return { 'Mod-=': () => this.editor.commands.toggleMark('subscript') }
+  },
+})
+
+// ---------- AI 改写选区保持高亮（窗口打开时选中范围仍可见） ----------
+const aiSelKey = new PluginKey('aiSelectionHighlight')
+const AiSelPlugin = new Plugin({
+  key: aiSelKey,
+  state: {
+    init: () => DecorationSet.empty,
+    apply: (tr, set) => {
+      const meta = tr.getMeta(aiSelKey)
+      return meta ? DecorationSet.create(tr.doc, meta) : set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return aiSelKey.getState(state)
+    },
   },
 })
 
@@ -133,7 +169,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiKeepSelection = false }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -178,6 +214,9 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       TaskList,
       TaskItem.configure({ nested: true }),
       FontStyleExt,
+      Superscript,
+      Subscript,
+      AiSelPlugin,
     ],
     [],
   )
@@ -301,6 +340,20 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
+
+  // AI 改写窗口打开时：保持选区高亮可见（编辑器失焦也不消失）
+  useEffect(() => {
+    if (!editor) return
+    const decos = []
+    if (aiKeepSelection) {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        decos.push(Decoration.inline(from, to, { class: 'ai-sel-highlight' }))
+      }
+    }
+    editor.view.dispatch(editor.state.tr.setMeta(aiSelKey, decos.length ? decos : null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiKeepSelection, editor])
 
   // 分页模式：分页位置对齐段落边界，不会把文字从中间切断
   useEffect(() => {
@@ -459,6 +512,9 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       },
       { label: '清除格式', icon: <Icon name="eraser" size={15} />, action: () => chain().clearNodes().unsetAllMarks().run() },
       { sep: true },
+      { label: '代码块', icon: <Icon name="codeBlock" size={15} />, action: () => chain().toggleCodeBlock().run() },
+      { label: '引用', icon: <Icon name="quote" size={15} />, action: () => chain().toggleBlockquote().run() },
+      { sep: true },
       { label: 'AI 改写', icon: <Icon name="sparkle" size={15} />, action: () => onAi?.() },
     ]
   }
@@ -518,12 +574,9 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       return
     }
     const block = e.target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre')
+    // 飞书式：鼠标在内容区移动，手柄持续跟随当前行；空白处不清空，保持上一个块直到碰到新块
     if (!block) {
-      clearTimeout(hoverOpenTimerRef.current)
-      clearTimeout(hoverCloseTimerRef.current)
-      hoverBlockRef.current = null
-      if (blockMenuOpenRef.current) { blockMenuOpenRef.current = false; setBlockMenuOpen(false) }
-      setHoverBlock(null)
+      scheduleHandle()
       return
     }
     if (block !== hoverBlockRef.current) {
@@ -535,7 +588,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       updateHandle()
     } else {
       scheduleHandle()
-      // 鼠标在普通内容上（不在菜单内）→ 延迟收起菜单，避免“移开又自己打开”
+      // 鼠标在普通内容上（不在菜单内）→ 延迟收起菜单
       if (blockMenuOpenRef.current && !e.target.closest('.para-handle-menu')) {
         closeMenuSoon()
       }
@@ -580,7 +633,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       {hoverBlock && !blockMenuOpen && (
         <div
           className="para-handle"
-          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 34 }}
+          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 }}
           onMouseEnter={() => {
             clearTimeout(hoverCloseTimerRef.current)
             hoverOpenTimerRef.current = setTimeout(() => {
@@ -591,13 +644,13 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           onMouseLeave={closeMenuSoon}
         >
           <span className="para-handle-t">T</span>
-          <Icon name="dots" size={11} />
+          <span className="para-handle-dots"><Icon name="dots" size={12} /></span>
         </div>
       )}
       {hoverBlock && blockMenuOpen && (
         <div
           className="menu para-handle-menu"
-          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 34 }}
+          style={{ top: hoverBlock.top + 2, left: hoverBlock.left - 42 }}
           onMouseEnter={() => {
             clearTimeout(hoverOpenTimerRef.current)
             clearTimeout(hoverCloseTimerRef.current)

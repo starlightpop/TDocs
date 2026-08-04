@@ -17,6 +17,9 @@ export const Icons = {
   trash: (
     <svg viewBox="0 0 24 24" {...p}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
   ),
+  paste: (
+    <svg viewBox="0 0 24 24" {...p}><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M9 4h6" /><path d="M9 11h6M9 15h4" /></svg>
+  ),
   edit: (
     <svg viewBox="0 0 24 24" {...p}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
   ),

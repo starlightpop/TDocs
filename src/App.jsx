@@ -542,29 +542,22 @@ export default function App() {
     setShowExportMenu(false)
   }
 
-  // 点击外部关闭缩放菜单 / 设置菜单
-  useEffect(() => {
-    if (!zoomMenuOpen && !showSettings) return
-    const close = () => { setZoomMenuOpen(false); setShowSettings(false) }
-    setTimeout(() => window.addEventListener('click', close), 0)
-    return () => window.removeEventListener('click', close)
-  }, [zoomMenuOpen, showSettings])
+  // 统一菜单互斥：打开任意一个，关闭其他所有（含缩放/标尺）
+  const closeAllMenus = () => {
+    setShowExportMenu(false)
+    setShowPageMenu(false)
+    setShowSettings(false)
+    setZoomMenuOpen(false)
+    setRulerOpen(false)
+  }
 
-  // 点击外部关闭标尺菜单
+  // 点击外部关闭所有浮层菜单（互斥 + 全局关闭统一）
   useEffect(() => {
-    if (!rulerOpen) return
-    const close = () => setRulerOpen(false)
+    if (!showExportMenu && !showPageMenu && !showSettings && !zoomMenuOpen && !rulerOpen) return
+    const close = () => closeAllMenus()
     setTimeout(() => window.addEventListener('click', close), 0)
     return () => window.removeEventListener('click', close)
-  }, [rulerOpen])
-
-  // 点击外部关闭顶栏菜单（导出 / 页面 / 设置）
-  useEffect(() => {
-    if (!showExportMenu && !showPageMenu && !showSettings) return
-    const close = () => { setShowExportMenu(false); setShowPageMenu(false); setShowSettings(false) }
-    setTimeout(() => window.addEventListener('click', close), 0)
-    return () => window.removeEventListener('click', close)
-  }, [showExportMenu, showPageMenu, showSettings])
+  }, [showExportMenu, showPageMenu, showSettings, zoomMenuOpen, rulerOpen])
 
   // 窗口过窄时自动收起侧边栏大纲树，避免页面被挤压遮挡
   useEffect(() => {
@@ -656,7 +649,7 @@ export default function App() {
             <button
               className="tb-block-btn tb-page-btn"
               title="宽屏视图 / A4 / B5 纸张"
-              onClick={(e) => { e.stopPropagation(); setShowExportMenu(false); setShowSettings(false); setShowPageMenu(!showPageMenu) }}
+              onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageMenu(!showPageMenu) }}
             >
               {PAPER[paper][0]}
               <Icon name="chevronDown" size={13} />
@@ -696,7 +689,7 @@ export default function App() {
             <button
               className="icon-btn"
               data-tip="设置"
-              onClick={(e) => { e.stopPropagation(); setShowPageMenu(false); setShowExportMenu(false); setShowSettings(!showSettings) }}
+              onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(!showSettings) }}
             >
               <Icon name="settings" />
             </button>
@@ -769,7 +762,7 @@ export default function App() {
 
           {activeDoc && (
             <div className="menu-wrap">
-              <button className="btn" onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu) }}>
+              <button className="btn" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowExportMenu(!showExportMenu) }}>
                 <Icon name="download" size={15} />导出
               </button>
               {showExportMenu && (
@@ -843,6 +836,7 @@ export default function App() {
                   if (e.target.closest('.ruler-grip-l, .ruler-grip-r')) return
                   const d = rulerDownRef.current
                   if (d && (Math.abs(e.clientX - d.x) > 4 || Math.abs(e.clientY - d.y) > 4)) return
+                  closeAllMenus()
                   setRulerOpen(!rulerOpen)
                 }}
               >
@@ -890,6 +884,7 @@ export default function App() {
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
+                aiKeepSelection={!!aiPrompt}
               />
               <div className="statusbar">
                 <span>{stats.words} 词</span>
@@ -907,7 +902,7 @@ export default function App() {
                     <button
                       className="zoom-arrow"
                       title="选择缩放比例"
-                      onClick={(e) => { e.stopPropagation(); setZoomMenuOpen(!zoomMenuOpen) }}
+                      onClick={(e) => { e.stopPropagation(); closeAllMenus(); setZoomMenuOpen(!zoomMenuOpen) }}
                     >
                       <Icon name="chevronDown" size={10} />
                     </button>
