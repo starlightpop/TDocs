@@ -734,15 +734,17 @@ html.platform-mac .topbar .menu {
 
 /* 分页模式（A4/B5）：Word 式分页显示 */
 .page.paged {
+  /* WPS 式页边距：上下统一，首页顶部也不突出 */
+  padding-top: 96px;
   padding-bottom: calc(var(--page-h, 1123px) * 0.7);
 }
 /* 分离页面留白：由 ProseMirror Decoration 类名驱动；
    用 padding 而非 margin，避免相邻外边距合并导致留白减半 */
 .editor-content .page-pad-bottom {
-  padding-bottom: 48px !important;
+  padding-bottom: 96px !important;
 }
 .editor-content .page-pad-top {
-  padding-top: 48px !important;
+  padding-top: 96px !important;
 }
 .page-breaks {
   position: absolute;

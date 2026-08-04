@@ -63,7 +63,7 @@ const FontStyleExt = TextStyle.extend({
 })
 
 // ---------- 分页留白：通过 ProseMirror Decoration 给分页边界段落加类名（由编辑器状态管理，不会被重排剥离） ----------
-const PAGE_PAD = 48
+const PAGE_PAD = 96
 const pagePadKey = new PluginKey('pagePadPadding')
 const PagePadExtension = Extension.create({
   name: 'pagePadPadding',
