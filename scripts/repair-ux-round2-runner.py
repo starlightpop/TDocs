@@ -2,6 +2,18 @@ from pathlib import Path
 
 path = Path('scripts/apply-ux-stability-round2.py')
 text = path.read_text()
+
+# Python re.sub interprets backslash escapes in a replacement string. Returning
+# the generated JavaScript from a function preserves literal \n sequences.
+code_block_needle = "    r'''const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({"
+if code_block_needle not in text:
+    raise SystemExit('code block replacement point not found')
+text = text.replace(
+    code_block_needle,
+    "    lambda _match: r'''const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({",
+    1,
+)
+
 needle = "if 'showLangMenu' in toolbar or 'CODE_LANGS' in toolbar:\n    raise SystemExit('Toolbar language picker cleanup failed')\n"
 replacement = r'''if 'showLangMenu' in toolbar or 'CODE_LANGS' in toolbar:
     start = toolbar.find("      {/* 代码块语言选择 + 运行（代码块激活时显示） */}")
@@ -18,5 +30,6 @@ if 'showLangMenu' in toolbar or 'CODE_LANGS' in toolbar:
 '''
 if needle not in text:
     raise SystemExit('runner repair point not found')
-path.write_text(text.replace(needle, replacement, 1))
+text = text.replace(needle, replacement, 1)
+path.write_text(text)
 print('Round 2 runner hardened.')
