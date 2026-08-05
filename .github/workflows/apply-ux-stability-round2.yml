@@ -6,6 +6,7 @@ on:
       - agent/tdocs-word-docs-foundation
     paths:
       - scripts/apply-ux-stability-round2.py
+      - scripts/repair-ux-round2-runner.py
       - .github/workflows/apply-ux-stability-round2.yml
 
 permissions:
@@ -23,6 +24,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Harden refactor boundaries
+        run: python3 scripts/repair-ux-round2-runner.py
       - name: Apply UX stability refactor
         run: python3 scripts/apply-ux-stability-round2.py
       - name: Install dependencies
