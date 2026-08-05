@@ -11,32 +11,7 @@ def write(path, text):
 
 editor = read('src/components/Editor.jsx')
 
-font_style = r'''const FontStyleExt = TextStyle.extend({
-  name: 'textStyle',
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      fontSize: {
-        default: null,
-        parseHTML: (el) => el.style.fontSize || null,
-        renderHTML: (attrs) => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
-      },
-      fontFamily: {
-        default: null,
-        parseHTML: (el) => el.style.fontFamily || null,
-        renderHTML: (attrs) => (attrs.fontFamily ? { style: `font-family: ${attrs.fontFamily}` } : {}),
-      },
-    }
-  },
-})'''
-font_start = editor.find('const FontStyleExt =')
-sup_start = editor.find('const Superscript =', font_start)
-if font_start < 0 or sup_start < 0:
-    raise RuntimeError('FontStyleExt declaration boundaries missing')
-comment_start = editor.rfind('// ----------', font_start, sup_start)
-replacement_end = comment_start if comment_start > font_start else sup_start
-editor = editor[:font_start] + font_style + '\n\n// ---------- 上标 / 下标 ----------\n' + editor[sup_start:]
-
+# Remove pagination-only attributes from the actual CodeBlock extension without touching TextStyle or marks.
 code_start = editor.find('const CodeBlock = CodeBlockLowlight')
 if code_start < 0:
     raise RuntimeError('CodeBlock declaration missing')
@@ -62,6 +37,8 @@ editor = editor.replace(
 for token in ('lineStart', 'continued', 'codeId', 'data-line-start', 'data-continued', 'data-code-id'):
     if token in editor:
         raise RuntimeError(f'pagination code attribute still present: {token}')
+if 'fontSize:' not in editor or 'const Superscript' not in editor or 'const CodeBlock = CodeBlockLowlight' not in editor:
+    raise RuntimeError('core text or code editor declarations were damaged')
 write('src/components/Editor.jsx', editor)
 
 ai = read('src/components/AiPanel.jsx')
