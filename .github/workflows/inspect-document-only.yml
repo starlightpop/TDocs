@@ -1,0 +1,18 @@
+name: Inspect document-only boundaries
+on:
+  push:
+    branches: [release/0.2.0-preview]
+    paths: [.github/workflows/inspect-document-only.yml]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print structural markers
+        run: |
+          echo '=== App markers ==='
+          grep -nE "工作模式|文档 ----------|拖动标尺|操作 ----------|kind === 'word'|showPageMenu|rulerOpen|pagePad|breakStyle|pageLabelStyle|<Editor|<SettingsDialog|<Sidebar" src/App.jsx || true
+          echo '=== Editor markers ==='
+          grep -nE "页节点|分页留白|真分页|版式切换|编辑时实时重排|分页模式|export default function Editor|PagePadExtension|reflow|paged|pageH|breakOffsets|visualScale|layoutKey" src/components/Editor.jsx || true
+          echo '=== Toolbar / Sidebar / Settings ==='
+          grep -nE "isWord|Word|word|page|createMenuOpen|new-doc-split" src/components/Toolbar.jsx src/components/Sidebar.jsx src/components/SettingsDialog.jsx || true
