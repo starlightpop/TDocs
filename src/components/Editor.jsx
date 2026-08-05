@@ -3,7 +3,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
-import { Mark, mergeAttributes } from '@tiptap/core'
+import { Extension, Mark, mergeAttributes, markInputRule } from '@tiptap/core'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
 import c from 'highlight.js/lib/languages/c'
@@ -29,7 +29,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
-import { looksLikeMarkdown, renderMarkdown } from '../lib/markdown.js'
+import { looksLikeMarkdown, renderMarkdown, shouldPreferMarkdownPaste } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
 import BubbleBar from './BubbleBar.jsx'
@@ -134,6 +134,24 @@ const AiSelPlugin = new Plugin({
     decorations(state) {
       return aiSelKey.getState(state)
     },
+  },
+})
+
+
+// ---------- Markdown 直接输入识别 ----------
+// StarterKit 已处理标题、列表、引用、分割线与代码围栏；这里补齐行内 Markdown。
+const MarkdownTyping = Extension.create({
+  name: 'markdownTyping',
+  addInputRules() {
+    const marks = this.editor.schema.marks
+    return [
+      markInputRule({ find: /(?:^|\s)((?:\*\*)((?:[^*\n]+))(?:\*\*))$/, type: marks.bold }),
+      markInputRule({ find: /(?:^|\s)((?:__)((?:[^_\n]+))(?:__))$/, type: marks.bold }),
+      markInputRule({ find: /(?:^|\s)((?:\*)((?:[^*\n]+))(?:\*))$/, type: marks.italic }),
+      markInputRule({ find: /(?:^|\s)((?:_)((?:[^_\n]+))(?:_))$/, type: marks.italic }),
+      markInputRule({ find: /(?:^|\s)((?:~~)((?:[^~\n]+))(?:~~))$/, type: marks.strike }),
+      markInputRule({ find: /(?:^|\s)((?:`)((?:[^`\n]+))(?:`))$/, type: marks.code }),
+    ].filter((rule) => Boolean(rule))
   },
 })
 
@@ -428,6 +446,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         codeBlock: false, // 用带行号的自定义 CodeBlock
       }),
       CodeBlock,
+      MarkdownTyping,
       Underline,
       TextStyle,
       Color,
@@ -500,26 +519,24 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           reader.readAsText(file)
           return true
         }
-        // 粘贴纯文本且形似 Markdown → 自动转换
+        // 剪贴板常同时带 text/plain 与 text/html；明确的 Markdown 应优先解析。
         const text = event.clipboardData?.getData('text/plain')
         const html = event.clipboardData?.getData('text/html')
-        if (!html && text) {
-          if (looksLikeMarkdown(text)) {
-            event.preventDefault()
-            insertMarkdownText(view, text, null)
-            return true
-          }
-          // 多行纯文本 → 每行一段，避免粘成一坨
-          if (text.includes('\n')) {
-            event.preventDefault()
-            const paras = text
-              .replace(/\r/g, '')
-              .split('\n')
-              .map((l) => `<p>${escapeHtmlText(l) || '<br>'}</p>`)
-              .join('')
-            insertHtmlContent(view, paras, null)
-            return true
-          }
+        if (text && shouldPreferMarkdownPaste(text, html)) {
+          event.preventDefault()
+          insertMarkdownText(view, text, null)
+          return true
+        }
+        // 普通多行纯文本仍按段落插入，不影响真正的富文本粘贴。
+        if (!html && text?.includes('\n')) {
+          event.preventDefault()
+          const paras = text
+            .replace(/\r/g, '')
+            .split('\n')
+            .map((l) => `<p>${escapeHtmlText(l) || '<br>'}</p>`)
+            .join('')
+          insertHtmlContent(view, paras, null)
+          return true
         }
         return false
       },
