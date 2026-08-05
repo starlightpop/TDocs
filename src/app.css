@@ -3181,3 +3181,101 @@ html.platform-mac .topbar .menu {
   .main[data-workspace="document"] .document-page { padding: 32px 24px; border-radius: 12px; }
   .settings-dialog-body { grid-template-columns: 132px minmax(0, 1fr); }
 }
+
+/* 0.2.0-preview infinite-document and stable code editor repair */
+/* Keep the visible document boundary, but always prepare substantial editable
+   space below the viewport. Content naturally extends this element further. */
+.main[data-workspace="document"] .page-wrap {
+  width: min(960px, 100%);
+  margin: 0 auto;
+}
+.main[data-workspace="document"] .document-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: max(1800px, calc(100vh + 900px)) !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* Code block uses valid sibling layers: gutter + independently scrollable code. */
+.code-block-shell {
+  --code-font-size: 14px;
+  --code-line-height: 26px;
+  position: relative;
+  overflow: visible !important;
+}
+.code-block-body {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.code-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+.code-block-shell .code-scroll > pre {
+  display: block !important;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+  font: 400 var(--code-font-size)/var(--code-line-height) var(--font-mono) !important;
+}
+.code-block-shell .code-scroll > pre > code,
+.code-block-shell .code-scroll > pre > .code-editable {
+  display: block !important;
+  box-sizing: border-box;
+  min-width: 100%;
+  margin: 0 !important;
+  padding: 14px 16px !important;
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  tab-size: 2;
+  font: inherit !important;
+  line-height: var(--code-line-height) !important;
+}
+.code-block-shell .code-gutter {
+  display: flex !important;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 52px;
+  margin: 0 !important;
+  padding: 14px 0 !important;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-3) 84%, transparent);
+  color: var(--text-3);
+  font: 400 var(--code-font-size)/var(--code-line-height) var(--font-mono) !important;
+  user-select: none;
+}
+.code-block-shell .code-gutter > span {
+  display: block;
+  flex: 0 0 var(--code-line-height);
+  height: var(--code-line-height);
+  padding: 0 10px 0 4px;
+  line-height: var(--code-line-height) !important;
+  text-align: right;
+  box-sizing: border-box;
+}
+.code-block-shell .code-gutter > span.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+.code-block-shell .code-completion-menu {
+  max-width: min(320px, calc(100% - 24px));
+}

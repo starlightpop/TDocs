@@ -151,10 +151,7 @@ const countCodeLines = (text) => Math.max(1, String(text || '').split('\n').leng
 const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
   addKeyboardShortcuts() {
     return {
-      Enter: () => {
-        if (!this.editor.isActive('codeBlock')) return false
-        return this.editor.commands.insertContent('\n')
-      },
+      ...this.parent?.(),
       Tab: () => {
         const { state, view } = this.editor
         const { $from, empty } = state.selection
@@ -171,6 +168,17 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         const cursor = from + completion.insert.length - (completion.cursorBack || 0)
         tr = tr.setSelection(TextSelection.create(tr.doc, cursor))
         view.dispatch(tr)
+        return true
+      },
+      'Shift-Tab': () => {
+        const { state, view } = this.editor
+        const { $from, empty } = state.selection
+        if (!empty || $from.parent.type.name !== 'codeBlock') return false
+        const lineStart = state.selection.from - $from.parent.textBetween(0, $from.parentOffset, '\n', '\n').split('\n').at(-1).length
+        const lineText = $from.parent.textBetween(lineStart - $from.start(), $from.parentOffset, '\n', '\n')
+        const remove = lineText.startsWith('  ') ? 2 : lineText.startsWith('\t') ? 1 : 0
+        if (!remove) return true
+        view.dispatch(state.tr.delete(lineStart, lineStart + remove))
         return true
       },
       Escape: () => {
@@ -241,13 +249,20 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       actions.append(select, runButton)
       head.append(title, actions)
 
-      const pre = document.createElement('pre')
+      const body = document.createElement('div')
+      body.className = 'code-block-body'
       const gutter = document.createElement('div')
       gutter.className = 'code-gutter'
       gutter.setAttribute('aria-hidden', 'true')
       gutter.contentEditable = 'false'
+      const scroller = document.createElement('div')
+      scroller.className = 'code-scroll'
+      const pre = document.createElement('pre')
       const code = document.createElement('code')
-      pre.append(gutter, code)
+      code.className = 'code-editable'
+      pre.append(code)
+      scroller.append(pre)
+      body.append(gutter, scroller)
 
       const completionMenu = document.createElement('div')
       completionMenu.className = 'code-completion-menu'
@@ -256,8 +271,8 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       const footer = document.createElement('div')
       footer.className = 'code-block-footer'
       footer.contentEditable = 'false'
-      footer.textContent = 'Tab 补全 · ⌘C / Ctrl+C 退出代码块'
-      shell.append(head, pre, footer, completionMenu)
+      footer.textContent = 'Tab 补全 · Shift+Tab 减少缩进 · ⌘C / Ctrl+C 退出代码块'
+      shell.append(head, body, footer, completionMenu)
 
       const syncActiveLine = () => {
         const spans = [...gutter.children]
@@ -334,8 +349,12 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       }
       const onSelection = () => { syncActiveLine(); requestAnimationFrame(renderCompletions) }
       const hideCompletions = () => { completionMenu.hidden = true }
+      const onDocumentPointerDown = (event) => {
+        if (!shell.contains(event.target)) hideCompletions()
+      }
       view.dom.addEventListener('tdocs:code-selection', onSelection)
       view.dom.addEventListener('tdocs:hide-code-completions', hideCompletions)
+      document.addEventListener('pointerdown', onDocumentPointerDown, true)
       render()
       return {
         dom: shell,
@@ -346,10 +365,12 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
           render()
           return true
         },
-        stopEvent: (event) => Boolean(event.target.closest?.('.code-block-head, .code-block-footer')),
+        stopEvent: (event) => Boolean(event.target.closest?.('.code-block-head, .code-block-footer, .code-completion-menu')),
+        ignoreMutation: (mutation) => !code.contains(mutation.target),
         destroy: () => {
           view.dom.removeEventListener('tdocs:code-selection', onSelection)
           view.dom.removeEventListener('tdocs:hide-code-completions', hideCompletions)
+          document.removeEventListener('pointerdown', onDocumentPointerDown, true)
         },
       }
     }
