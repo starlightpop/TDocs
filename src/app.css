@@ -2664,3 +2664,232 @@ html.platform-mac .topbar .menu {
 .term-empty { color: #8b93a1; }
 .term-out + .term-out { margin-top: 8px !important; padding-top: 8px; border-top: 1px solid #262b33; }
 .tb-run-btn:disabled { opacity: .45; cursor: wait; }
+
+
+/* ============================================================
+   UX stability round 2
+   ============================================================ */
+.canvas {
+  overflow-anchor: none;
+  scroll-behavior: auto;
+}
+.page.paged,
+.page.paged .editor-content {
+  min-height: 0 !important;
+}
+.editor-content .pm-page-wrap {
+  contain: layout paint;
+}
+.editor-content [data-page] {
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* All long dropdowns have a bounded viewport instead of extending under the window. */
+.toolbar .menu,
+.topbar .menu,
+.ai-select-menu,
+.ai-model-menu,
+.zoom-menu {
+  max-height: min(360px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Google Docs-style document overflow action: quiet circle, vertically centred. */
+.doc-item-actions {
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  background: transparent !important;
+}
+.doc-item-actions .doc-more-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% !important;
+  color: var(--text-3);
+}
+.doc-item-actions .doc-more-btn:hover,
+.doc-item.active .doc-item-actions .doc-more-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.doc-item.active .doc-item-actions .doc-more-btn {
+  background: transparent;
+}
+
+/* Find/replace is a document row below the toolbar, so topbar menus never cover it. */
+.find-replace.find-replace-dock {
+  position: relative;
+  inset: auto;
+  z-index: 24;
+  width: 100%;
+  max-width: none;
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 !important;
+  box-shadow: none;
+  background: var(--surface);
+  backdrop-filter: none;
+}
+.find-replace-dock .find-row,
+.find-replace-dock .replace-row {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.find-replace-dock .find-option {
+  display: flex;
+  width: min(760px, 100%);
+  margin: 6px auto 0;
+  padding-left: 24px;
+}
+
+/* A code block remains one logical object across pages. Continuations preserve line numbers. */
+.code-block-shell {
+  position: relative;
+  margin: .7em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-3);
+  break-inside: avoid;
+}
+.code-block-shell.continued {
+  margin-top: .25em;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+.code-block-head {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  user-select: none;
+}
+.code-block-title {
+  letter-spacing: .02em;
+}
+.code-language-select {
+  max-width: 150px;
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  outline: none;
+  cursor: pointer;
+}
+.code-language-select:hover,
+.code-language-select:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+.code-block-shell > pre {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent;
+}
+.code-block-footer {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 10px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 78%, transparent);
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  user-select: none;
+}
+
+/* The result viewer is app chrome, not a native macOS terminal; use one right-side close action. */
+.code-terminal-head {
+  min-height: 36px;
+  padding: 6px 8px 6px 10px;
+}
+.code-terminal-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #8b93a1;
+}
+.code-terminal-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-terminal-status {
+  margin-left: auto;
+}
+.code-terminal-head .icon-btn {
+  margin-left: 2px;
+}
+
+/* Model picker stays inside the rewrite header and groups models by provider. */
+.ai-prompt-head-actions {
+  min-width: 0;
+  align-items: center;
+}
+.ai-model-picker {
+  min-width: 0;
+}
+.ai-model-btn {
+  max-width: 250px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px !important;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ai-model-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-model-menu {
+  top: calc(100% + 5px);
+  right: 0;
+  width: min(330px, calc(100vw - 32px));
+  padding: 6px;
+}
+.ai-model-group + .ai-model-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.ai-model-menu .settings-label {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.ai-sel-highlight {
+  background: linear-gradient(110deg, rgba(90,117,255,.34), rgba(171,91,255,.38), rgba(70,210,224,.28)) !important;
+  box-shadow: inset 0 -2px 0 rgba(126,100,255,.95), 0 0 0 1px rgba(124,102,255,.28) !important;
+}
+
+@media (max-width: 720px) {
+  .find-replace-dock .replace-row { flex-wrap: wrap; }
+  .ai-model-btn { max-width: 150px; }
+}

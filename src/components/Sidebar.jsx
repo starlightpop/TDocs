@@ -125,13 +125,15 @@ export default function Sidebar({
         </div>
         <div className="doc-item-actions" onClick={(e) => e.stopPropagation()}>
           <button
-            className="icon-btn"
+            className="icon-btn doc-more-btn"
             data-tip="更多操作"
             aria-label="更多操作"
             onClick={(e) => {
               e.stopPropagation()
               const r = e.currentTarget.getBoundingClientRect()
-              setCtxMenu({ x: r.left, y: r.bottom + 4, items: docMenuItems(doc) })
+              const width = 156
+              const x = Math.max(8, Math.min(window.innerWidth - width - 8, r.right - width))
+              setCtxMenu({ x, y: r.bottom + 4, items: docMenuItems(doc) })
             }}
           >
             <Icon name="dots" size={15} />

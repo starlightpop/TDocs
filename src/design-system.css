@@ -345,3 +345,14 @@ textarea:focus-visible,
   .replace-row { flex-wrap: wrap; }
   .replace-row input { flex-basis: calc(100% - 24px); }
 }
+
+
+/* Docked search row wins over the legacy fixed search panel. */
+.find-replace.find-replace-dock {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  border-radius: 0 !important;
+  box-shadow: none;
+}

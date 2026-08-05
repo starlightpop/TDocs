@@ -3,10 +3,21 @@ import { Icon } from './Icons.jsx'
 import { findTextMatches } from '../lib/search.js'
 import { setSearchHighlights } from '../extensions/SearchHighlight.js'
 
+const STORE_KEY = 'inkdocs.findReplace.v1'
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore invalid local state */ }
+  return { query: '', replacement: '', caseSensitive: false }
+}
+
 export default function FindReplace({ editor, onClose }) {
-  const [query, setQuery] = useState('')
-  const [replacement, setReplacement] = useState('')
-  const [caseSensitive, setCaseSensitive] = useState(false)
+  const initial = useRef(loadState()).current
+  const [query, setQuery] = useState(initial.query || '')
+  const [replacement, setReplacement] = useState(initial.replacement || '')
+  const [caseSensitive, setCaseSensitive] = useState(Boolean(initial.caseSensitive))
   const [matches, setMatches] = useState([])
   const [activeIndex, setActiveIndex] = useState(-1)
   const inputRef = useRef(null)
@@ -26,6 +37,10 @@ export default function FindReplace({ editor, onClose }) {
   }, [editor, query, caseSensitive])
 
   useEffect(() => {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ query, replacement, caseSensitive }))
+  }, [query, replacement, caseSensitive])
+
+  useEffect(() => {
     refresh()
     if (!editor) return undefined
     editor.on('update', refresh)
@@ -39,6 +54,7 @@ export default function FindReplace({ editor, onClose }) {
 
   useEffect(() => {
     inputRef.current?.focus()
+    inputRef.current?.select()
   }, [])
 
   const move = (delta) => {
@@ -65,7 +81,7 @@ export default function FindReplace({ editor, onClose }) {
   }
 
   return (
-    <div className="find-replace" role="dialog" aria-label="查找和替换">
+    <div className="find-replace find-replace-dock" role="search" aria-label="查找和替换">
       <div className="find-row">
         <Icon name="search" size={16} />
         <input

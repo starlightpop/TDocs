@@ -249,6 +249,7 @@ export default function App() {
   const zoomAnchorRef = useRef(null)
   const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
+  const lastSelectionRef = useRef(null)
 
   // 拖动标尺灰白交界：连续调整页边距（24~160px）
   const startRulerDrag = (e) => {
@@ -283,6 +284,7 @@ export default function App() {
 
   // ---------- 字号缩放（⌘/Ctrl + 滚轮） ----------
   const [zoom, setZoom] = useState(() => Number(localStorage.getItem('inkdocs.zoom')) || 1)
+  const previousZoomRef = useRef(zoom)
   const mainRef = useRef(null)
 
   // ---------- AI ----------
@@ -308,6 +310,39 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('inkdocs.zoom', String(zoom))
   }, [zoom])
+
+  // 页面缩放后按比例修正滚动坐标并钳制到新画布范围，避免缩小后停在不存在的空白区域。
+  useEffect(() => {
+    const previous = previousZoomRef.current || 1
+    previousZoomRef.current = zoom
+    if (paper === 'wide') return
+    const canvas = mainRef.current?.querySelector('.canvas')
+    if (!canvas) return
+    const ratio = zoom / previous
+    const frame = requestAnimationFrame(() => {
+      canvas.scrollTop *= ratio
+      canvas.scrollLeft *= ratio
+      requestAnimationFrame(() => {
+        canvas.scrollTop = Math.max(0, Math.min(canvas.scrollTop, canvas.scrollHeight - canvas.clientHeight))
+        canvas.scrollLeft = Math.max(0, Math.min(canvas.scrollLeft, canvas.scrollWidth - canvas.clientWidth))
+        window.dispatchEvent(new Event('tdocs:layout'))
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [zoom, paper])
+
+  const changePaper = (nextPaper) => {
+    if (nextPaper === paper) return
+    setPaper(nextPaper)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const canvas = mainRef.current?.querySelector('.canvas')
+      if (canvas) {
+        canvas.scrollTop = 0
+        canvas.scrollLeft = 0
+      }
+      window.dispatchEvent(new Event('tdocs:layout'))
+    }))
+  }
 
   // 缩放菜单始终锚定状态栏按钮。大纲、侧边栏或窗口尺寸变化时重新计算。
   useEffect(() => {
@@ -565,7 +600,7 @@ export default function App() {
   const openAi = (e) => {
     if (!editor) return
     const { from, to } = editor.state.selection
-    const selection = from !== to ? { from, to } : null
+    const selection = from !== to ? { from, to } : lastSelectionRef.current
     let pos = null
     if (selection) {
       const sel = window.getSelection()
@@ -752,7 +787,7 @@ export default function App() {
           <button
             className={`icon-btn${showVersionHistory ? ' active' : ''}`}
             data-tip="版本历史"
-            onClick={() => setShowVersionHistory((value) => !value)}
+            onClick={() => { setShowOutline(false); setAiConfigOpen(false); setShowVersionHistory((value) => !value) }}
           >
             <Icon name="undo" />
           </button>
@@ -772,7 +807,7 @@ export default function App() {
                 <div className="settings-label">工作模式</div>
                 <button
                   className={`menu-item${paper === 'wide' ? ' active' : ''}`}
-                  onClick={() => { setPaper('wide'); setShowPageMenu(false) }}
+                  onClick={() => { changePaper('wide'); setShowPageMenu(false) }}
                 >
                   <span>文档模式（无限画布）</span>
                   {paper === 'wide' && <span className="menu-item-check">✓</span>}
@@ -781,14 +816,14 @@ export default function App() {
                 <div className="settings-label">页面模式</div>
                 <button
                   className={`menu-item${paper === 'a4' ? ' active' : ''}`}
-                  onClick={() => { setPaper('a4'); setShowPageMenu(false) }}
+                  onClick={() => { changePaper('a4'); setShowPageMenu(false) }}
                 >
                   <span>A4</span>
                   {paper === 'a4' && <span className="menu-item-check">✓</span>}
                 </button>
                 <button
                   className={`menu-item${paper === 'b5' ? ' active' : ''}`}
-                  onClick={() => { setPaper('b5'); setShowPageMenu(false) }}
+                  onClick={() => { changePaper('b5'); setShowPageMenu(false) }}
                 >
                   <span>B5</span>
                   {paper === 'b5' && <span className="menu-item-check">✓</span>}
@@ -859,7 +894,7 @@ export default function App() {
                 <div className="menu-sep" />
                 <button
                   className="menu-item"
-                  onClick={() => { setShowSettings(false); setAiConfigOpen(true) }}
+                  onClick={() => { setShowSettings(false); setShowOutline(false); setShowVersionHistory(false); setAiConfigOpen(true) }}
                 >
                   <Icon name="sparkle" size={15} />
                   <span>AI 配置</span>
@@ -946,6 +981,9 @@ export default function App() {
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
+              {showFindReplace && (
+                <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
+              )}
               {/* 边距标尺（Word/WPS 式）：宽度与页面文字区对齐，可拖动灰白交界调边距，点击弹预设档位 */}
               <div
                 className="ruler"
@@ -1008,7 +1046,10 @@ export default function App() {
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
+                onSelectionRange={(range) => { lastSelectionRef.current = range }}
                 aiSelection={aiPrompt?.selection || null}
+                layoutKey={`${paper}:${pageSize.w}:${pageSize.h}:${pagePad}`}
+                visualScale={zoom}
                 aiInline={aiInline}
                 onResolveInline={() => setAiInline(null)}
               />
@@ -1049,7 +1090,7 @@ export default function App() {
                   </div>
                   <button
                     className={`statusbar-link${showOutline ? ' active' : ''}`}
-                    onClick={() => setShowOutline(!showOutline)}
+                    onClick={() => { setShowVersionHistory(false); setAiConfigOpen(false); setShowOutline(!showOutline) }}
                   >
                     大纲 {headings.length ? `(${headings.length})` : ''}
                   </button>
@@ -1065,9 +1106,6 @@ export default function App() {
                 <Icon name="plus" size={15} />创建第一篇文档
               </button>
             </div>
-          )}
-          {showFindReplace && (
-            <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
           )}
           {showVersionHistory && activeDoc && (
             <VersionHistory
@@ -1087,7 +1125,6 @@ export default function App() {
               selection={aiPrompt.selection}
               pos={aiPrompt.pos}
               onClose={() => setAiPrompt(null)}
-              onOpenConfig={() => { setAiConfigOpen(true); setAiPrompt(null) }}
               onInlineDiff={handleInlineDiff}
             />
           )}

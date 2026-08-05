@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icons.jsx'
+import { getCodeLanguageLabel } from '../lib/codeLanguage.js'
 
 const TEXT_COLORS = [
   '#1c1e21', '#6b7280', '#9aa2b1', '#e5484d', '#f2814a', '#e0a428',
@@ -45,18 +46,6 @@ const HIGHLIGHT_COLORS = [
   '#a8e6d2', '#d3f2b6', '#fff3bf', '#c3fae8', '#d0ebff', '#e7e9ee',
   '#f5c6aa', '#b197fc', '#63e6be',
 ]
-// 代码块支持的语言（与 lowlight 注册一致）
-const CODE_LANGS = [
-  ['plaintext', '纯文本'],
-  ['c', 'C'],
-  ['cpp', 'C++'],
-  ['java', 'Java'],
-  ['python', 'Python'],
-  ['rust', 'Rust'],
-  ['matlab', 'MATLAB'],
-  ['javascript', 'JavaScript'],
-]
-
 function TB({ icon, title, active, disabled, onClick }) {
   return (
     <button
@@ -79,10 +68,17 @@ export default function Toolbar({ editor, onAi }) {
   const [showBlockMenu, setShowBlockMenu] = useState(false)
   const [showFontSize, setShowFontSize] = useState(false)
   const [showFontFamily, setShowFontFamily] = useState(false)
-  const [showLangMenu, setShowLangMenu] = useState(false)
   const [runOutput, setRunOutput] = useState(null) // 本地运行状态与标准输出
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
+  const [, setRevision] = useState(0)
+
+  useEffect(() => {
+    if (!editor) return undefined
+    const refresh = () => setRevision((value) => value + 1)
+    editor.on('transaction', refresh)
+    return () => editor.off('transaction', refresh)
+  }, [editor])
 
   if (!editor) return null
 
@@ -174,7 +170,6 @@ export default function Toolbar({ editor, onAi }) {
     setShowBlockMenu(false)
     setShowFontSize(false)
     setShowFontFamily(false)
-    setShowLangMenu(false)
   }
 
   return (
@@ -192,7 +187,7 @@ export default function Toolbar({ editor, onAi }) {
         <button
           className="tb-block-btn"
           title="段落样式（再次点击当前样式可恢复正文）"
-          onClick={() => { setShowBlockMenu(!showBlockMenu); setShowTextColor(false); setShowHighlight(false); setShowTableGrid(false) }}
+          onClick={() => { const next = !showBlockMenu; closePopovers(); setShowBlockMenu(next) }}
         >
           {BLOCK_OPTIONS.find(([v]) => v === blockValue)?.[1] || '正文'}
           <Icon name="chevronDown" size={13} />
@@ -223,7 +218,7 @@ export default function Toolbar({ editor, onAi }) {
         <button
           className="tb-block-btn tb-font-btn"
           title="字号"
-          onClick={() => { setShowFontSize(!showFontSize); setShowFontFamily(false); setShowBlockMenu(false); setShowTextColor(false); setShowHighlight(false) }}
+          onClick={() => { const next = !showFontSize; closePopovers(); setShowFontSize(next) }}
         >
           {(() => {
             const cur = Number.parseFloat(editor.getAttributes('textStyle').fontSize || '')
@@ -277,7 +272,7 @@ export default function Toolbar({ editor, onAi }) {
         <button
           className="tb-block-btn tb-font-btn tb-font-btn-wide"
           title="字体"
-          onClick={() => { setShowFontFamily(!showFontFamily); setShowFontSize(false); setShowBlockMenu(false); setShowTextColor(false); setShowHighlight(false) }}
+          onClick={() => { const next = !showFontFamily; closePopovers(); setShowFontFamily(next) }}
         >
           {(() => {
             const fam = editor.getAttributes('textStyle').fontFamily || ''
@@ -323,7 +318,7 @@ export default function Toolbar({ editor, onAi }) {
 
       {/* 文字颜色 */}
       <div className="menu-wrap">
-        <button className="color-btn" data-tip="文字颜色" aria-label="文字颜色" onClick={() => { setShowTextColor(!showTextColor); setShowHighlight(false); setShowTableGrid(false); setShowBlockMenu(false) }}>
+        <button className="color-btn" data-tip="文字颜色" aria-label="文字颜色" onClick={() => { const next = !showTextColor; closePopovers(); setShowTextColor(next) }}>
           A<div className="bar" />
         </button>
         {showTextColor && (
@@ -343,7 +338,7 @@ export default function Toolbar({ editor, onAi }) {
 
       {/* 高亮 */}
       <div className="menu-wrap">
-        <button className="color-btn" data-tip="高亮背景" aria-label="高亮背景" onClick={() => { setShowHighlight(!showHighlight); setShowTextColor(false); setShowTableGrid(false); setShowBlockMenu(false) }}>
+        <button className="color-btn" data-tip="高亮背景" aria-label="高亮背景" onClick={() => { const next = !showHighlight; closePopovers(); setShowHighlight(next) }}>
           <Icon name="highlight" size={15} />
         </button>
         {showHighlight && (
@@ -383,7 +378,7 @@ export default function Toolbar({ editor, onAi }) {
 
       {/* 表格 */}
       <div className="menu-wrap">
-        <button className="icon-btn" data-tip="插入表格" aria-label="插入表格" onClick={() => { setShowTableGrid(!showTableGrid); setShowTextColor(false); setShowHighlight(false); setShowBlockMenu(false) }}>
+        <button className="icon-btn" data-tip="插入表格" aria-label="插入表格" onClick={() => { const next = !showTableGrid; closePopovers(); setShowTableGrid(next) }}>
           <Icon name="table" size={17} />
         </button>
         {showTableGrid && (
@@ -431,42 +426,16 @@ export default function Toolbar({ editor, onAi }) {
           <TB icon="trash" title="删除表格" onClick={() => editor.chain().focus().deleteTable().run()} />
         </>
       )}
-      {/* 代码块语言选择 + 运行（代码块激活时显示） */}
+      {/* 语言选择位于代码块右上角；工具栏只保留运行入口。 */}
       {editor.isActive('codeBlock') && (
-        <>
-          <button className="tb-sup-sub tb-run-btn" title="在本机运行当前代码块" disabled={runOutput?.running} onClick={runCode}>▶</button>
-          <div className="menu-wrap">
-          <button
-            className="tb-block-btn tb-lang-btn"
-            title="代码语言（决定语法高亮）"
-            onClick={() => { setShowLangMenu(!showLangMenu); setShowBlockMenu(false); setShowFontSize(false); setShowFontFamily(false) }}
-          >
-            {CODE_LANGS.find(([v]) => v === (editor.getAttributes('codeBlock').language || 'plaintext'))?.[1] || '语言'}
-            <Icon name="chevronDown" size={13} />
-          </button>
-          {showLangMenu && (
-            <div className="menu lang-menu" onClick={(e) => e.stopPropagation()}>
-              {CODE_LANGS.map(([v, label]) => (
-                <button
-                  key={v}
-                  className={`menu-item${(editor.getAttributes('codeBlock').language || 'plaintext') === v ? ' active' : ''}`}
-                  onClick={() => { editor.chain().focus().updateAttributes('codeBlock', { language: v }).run(); setShowLangMenu(false) }}
-                >
-                  <span>{label}</span>
-                  {(editor.getAttributes('codeBlock').language || 'plaintext') === v && <span className="menu-item-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-          </div>
-        </>
+        <button className="tb-sup-sub tb-run-btn" title="在本机运行当前代码块" disabled={runOutput?.running} onClick={runCode}>▶</button>
       )}
       {runOutput && (
         <div className="code-terminal" style={{ top: runOutput.top, left: runOutput.left }}>
           <div className="code-terminal-head">
-            <span className="code-terminal-dots"><i /><i /><i /></span>
+            <span className="code-terminal-icon"><Icon name="codeBlock" size={13} /></span>
             <span className="code-terminal-title">
-              {runOutput.running ? '正在运行' : '运行结果'} · {CODE_LANGS.find(([value]) => value === runOutput.language)?.[1] || runOutput.language}
+              {runOutput.running ? '正在运行' : '运行结果'} · {getCodeLanguageLabel(runOutput.language)}
             </span>
             {!runOutput.running && (
               <span className={`code-terminal-status${runOutput.ok ? ' ok' : ' fail'}`}>
@@ -491,7 +460,7 @@ export default function Toolbar({ editor, onAi }) {
       <div className="divider" />
       <TB icon="eraser" title="清除格式" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} />
       <div className="divider" />
-      <button className="ai-btn" data-tip="AI 改写（调用大模型修改内容）" onClick={onAi}>
+      <button className="ai-btn" data-tip="AI 改写（调用大模型修改内容）" onMouseDown={(event) => event.preventDefault()} onClick={onAi}>
         <Icon name="sparkle" size={15} />AI
       </button>
     </div>

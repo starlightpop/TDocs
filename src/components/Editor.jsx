@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditor, EditorContent, Extension } from '@tiptap/react'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { Node, Mark, mergeAttributes } from '@tiptap/core'
@@ -36,6 +36,7 @@ import ContextMenu from './ContextMenu.jsx'
 import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
 import { SearchHighlightExtension } from '../extensions/SearchHighlight.js'
+import { CODE_LANGUAGES, getCodeLanguageLabel, resolveCodeCompletion } from '../lib/codeLanguage.js'
 
 // 将 HTML 内容转换并插入到编辑器指定位置
 function insertHtmlContent(view, html, pos) {
@@ -180,21 +181,93 @@ lowlight.register('javascript', javascript)
 lowlight.register('python', python)
 lowlight.register('rust', rust)
 lowlight.register('matlab', matlab)
-// 可用的语言列表（供语言选择菜单）
-const CODE_LANGUAGES = [
-  ['plaintext', '纯文本'],
-  ['c', 'C'],
-  ['cpp', 'C++'],
-  ['java', 'Java'],
-  ['python', 'Python'],
-  ['rust', 'Rust'],
-  ['matlab', 'MATLAB'],
-  ['javascript', 'JavaScript'],
-]
-
 const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      lineStart: {
+        default: 1,
+        parseHTML: (element) => Number(element.dataset.lineStart || 1),
+        renderHTML: (attrs) => ({ 'data-line-start': attrs.lineStart || 1 }),
+      },
+      continued: {
+        default: false,
+        parseHTML: (element) => element.dataset.continued === 'true',
+        renderHTML: (attrs) => (attrs.continued ? { 'data-continued': 'true' } : {}),
+      },
+    }
+  },
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        if (!this.editor.isActive('codeBlock')) return false
+        return this.editor.commands.insertContent('\n')
+      },
+      Tab: () => {
+        const { state, view } = this.editor
+        const { $from, empty } = state.selection
+        if (!empty || $from.parent.type.name !== 'codeBlock') return false
+        const language = $from.parent.attrs.language || 'plaintext'
+        const before = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n')
+        const completion = resolveCodeCompletion(language, before)
+        if (!completion) {
+          view.dispatch(state.tr.insertText('  '))
+          return true
+        }
+        const from = state.selection.from - completion.replaceLength
+        let tr = state.tr.insertText(completion.insert, from, state.selection.from)
+        const cursor = from + completion.insert.length - (completion.cursorBack || 0)
+        tr = tr.setSelection(TextSelection.create(tr.doc, cursor))
+        view.dispatch(tr)
+        return true
+      },
+      'Mod-c': () => {
+        const { state, view } = this.editor
+        const { $from, empty } = state.selection
+        if (!empty || $from.parent.type.name !== 'codeBlock') return false
+        const depth = $from.depth
+        const after = $from.after(depth)
+        const next = state.doc.nodeAt(after)
+        let tr = state.tr
+        let target = after + 1
+        if (next?.type.name !== 'paragraph') {
+          tr = tr.insert(after, state.schema.nodes.paragraph.create())
+        }
+        target = Math.min(tr.doc.content.size, target)
+        tr = tr.setSelection(TextSelection.near(tr.doc.resolve(target))).scrollIntoView()
+        view.dispatch(tr)
+        return true
+      },
+    }
+  },
   addNodeView() {
-    return ({ node }) => {
+    return ({ node: initialNode, getPos, view }) => {
+      let node = initialNode
+      const shell = document.createElement('div')
+      shell.className = 'code-block-shell'
+      const head = document.createElement('div')
+      head.className = 'code-block-head'
+      head.contentEditable = 'false'
+      const title = document.createElement('span')
+      title.className = 'code-block-title'
+      title.textContent = '代码'
+      const select = document.createElement('select')
+      select.className = 'code-language-select'
+      select.setAttribute('aria-label', '代码语言')
+      for (const [value, label] of CODE_LANGUAGES) {
+        const option = document.createElement('option')
+        option.value = value
+        option.textContent = label
+        select.append(option)
+      }
+      select.addEventListener('change', () => {
+        const pos = getPos()
+        if (typeof pos !== 'number') return
+        const attrs = { ...node.attrs, language: select.value }
+        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, attrs))
+      })
+      head.append(title, select)
+
       const pre = document.createElement('pre')
       const gutter = document.createElement('div')
       gutter.className = 'code-gutter'
@@ -202,12 +275,34 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       gutter.contentEditable = 'false'
       const code = document.createElement('code')
       pre.append(gutter, code)
+
+      const footer = document.createElement('div')
+      footer.className = 'code-block-footer'
+      footer.contentEditable = 'false'
+      footer.textContent = 'Tab 补全 · ⌘C / Ctrl+C 退出代码块'
+      shell.append(head, pre, footer)
+
       const render = () => {
         const count = Math.max(1, ((node.textContent || '').match(/\n/g)?.length || 0) + 1)
-        gutter.textContent = Array.from({ length: count }, (_, i) => i + 1).join('\n')
+        const start = Math.max(1, Number(node.attrs.lineStart) || 1)
+        gutter.textContent = Array.from({ length: count }, (_, index) => start + index).join('\n')
+        select.value = node.attrs.language || 'plaintext'
+        title.textContent = node.attrs.continued ? '代码 · 续' : '代码'
+        shell.dataset.language = getCodeLanguageLabel(select.value)
+        shell.classList.toggle('continued', Boolean(node.attrs.continued))
       }
       render()
-      return { dom: pre, contentDOM: code, update: (n) => { node = n; render(); return true } }
+      return {
+        dom: shell,
+        contentDOM: code,
+        update: (nextNode) => {
+          if (nextNode.type.name !== 'codeBlock') return false
+          node = nextNode
+          render()
+          return true
+        },
+        stopEvent: (event) => Boolean(event.target.closest?.('.code-block-head, .code-block-footer')),
+      }
     }
   },
 })
@@ -294,7 +389,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiSelection = null, aiInline = null, onResolveInline }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline, layoutKey = '', visualScale = 1 }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -308,6 +403,9 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const lastPairsRef = useRef('')
   const reflowRafRef = useRef(0)
   const reflowRunRef = useRef(0)
+  const reflowingRef = useRef(false)
+  const modeRef = useRef(paged)
+  const layoutKeyRef = useRef(layoutKey)
   const pagedRef = useRef(paged)
   pagedRef.current = paged
 
@@ -455,15 +553,43 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
-  // 保存用的 HTML：分页模式下把 page 节点展开为普通块（page 结构仅用于显示，不持久化）
+  const mergeCodeNodes = (left, right, schema) => {
+    const text = `${left.textContent || ''}\n${right.textContent || ''}`
+    return left.type.create(
+      { ...left.attrs, lineStart: Math.max(1, Number(left.attrs.lineStart) || 1), continued: Boolean(left.attrs.continued) },
+      text ? schema.text(text) : null,
+    )
+  }
+
+  const flattenBlocks = (state) => {
+    const blocks = []
+    state.doc.forEach((node) => {
+      if (node.type.name === 'page') node.forEach((child) => blocks.push(child))
+      else blocks.push(node)
+    })
+    const merged = []
+    for (const node of blocks) {
+      const previous = merged[merged.length - 1]
+      if (node.type.name === 'codeBlock' && node.attrs.continued && previous?.type.name === 'codeBlock') {
+        merged[merged.length - 1] = mergeCodeNodes(previous, node, state.schema)
+      } else {
+        merged.push(node)
+      }
+    }
+    return merged
+  }
+
+  const dispatchLayout = (view, tr) => {
+    reflowingRef.current = true
+    view.dispatch(tr)
+    queueMicrotask(() => { reflowingRef.current = false })
+  }
+
+  // 保存时合并跨页代码块，持久化为一个逻辑代码块。
   const getSaveHtml = () => {
     if (!editor) return ''
     if (!paged || editor.state.doc.firstChild?.type.name !== 'page') return editor.getHTML()
-    const blocks = []
-    editor.state.doc.forEach((n) => {
-      if (n.type.name === 'page') n.forEach((b) => blocks.push(b))
-      else blocks.push(n)
-    })
+    const blocks = flattenBlocks(editor.state)
     const container = editor.state.schema.nodes.doc.create(null, blocks)
     const dom = DOMSerializer.fromSchema(editor.state.schema).serializeFragment(container.content)
     const tmp = document.createElement('div')
@@ -484,27 +610,22 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
 
   // ---------- 真分页（A4/B5）：每页独立 DOM、固定尺寸、溢出自动建新页 ----------
   // 结构转换：宽屏（doc>block）<-> 分页（doc>page>block）
-  const toPaged = () => {
+  const toPaged = (rebuild = false) => {
     if (!editor) return
-    const { state } = editor
-    if (state.doc.firstChild?.type.name === 'page') return
-    const blocks = []
-    state.doc.forEach((n) => blocks.push(n))
-    if (!blocks.length) return
-    const pageNode = state.schema.nodes.page.create(null, blocks)
-    editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, pageNode))
+    const { state, view } = editor
+    if (!rebuild && state.doc.firstChild?.type.name === 'page') return
+    const blocks = flattenBlocks(state)
+    const content = blocks.length ? blocks : [state.schema.nodes.paragraph.create()]
+    const pageNode = state.schema.nodes.page.create(null, content)
+    dispatchLayout(view, state.tr.replaceWith(0, state.doc.content.size, pageNode))
   }
   const toWide = () => {
     if (!editor) return
-    const { state } = editor
+    const { state, view } = editor
     if (state.doc.firstChild?.type.name !== 'page') return
-    const blocks = []
-    state.doc.forEach((n) => {
-      if (n.type.name === 'page') n.forEach((b) => blocks.push(b))
-      else blocks.push(n)
-    })
+    const blocks = flattenBlocks(state)
     const content = blocks.length ? blocks : [state.schema.nodes.paragraph.create()]
-    editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, content))
+    dispatchLayout(view, state.tr.replaceWith(0, state.doc.content.size, content))
   }
   // 溢出重排：按真实纸张内容区测量。文本块跨页时先在可见行末拆分，再移动尾部。
   const getPageContentBottom = (pageEl) => {
@@ -545,6 +666,33 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     return candidate
   }
 
+  const splitCodeBlockAcrossPages = (state, view, pagePos, child, childPos, splitPos) => {
+    const text = child.textContent || ''
+    const rawOffset = Math.max(1, splitPos - (childPos + 1))
+    const cut = text.lastIndexOf('\n', Math.min(text.length - 1, rawOffset))
+    if (cut <= 0 || cut >= text.length - 1) return false
+    const beforeText = text.slice(0, cut)
+    const afterText = text.slice(cut + 1)
+    const startLine = Math.max(1, Number(child.attrs.lineStart) || 1)
+    const consumedLines = beforeText.split('\n').length
+    const first = child.type.create(
+      { ...child.attrs, lineStart: startLine },
+      beforeText ? state.schema.text(beforeText) : null,
+    )
+    const second = child.type.create(
+      { ...child.attrs, lineStart: startLine + consumedLines, continued: true },
+      afterText ? state.schema.text(afterText) : null,
+    )
+    let tr = state.tr.replaceWith(childPos, childPos + child.nodeSize, first)
+    const currentPage = tr.doc.nodeAt(pagePos)
+    const nextPos = pagePos + currentPage.nodeSize
+    const nextPage = tr.doc.nodeAt(nextPos)
+    if (nextPage?.type.name === 'page') tr = tr.insert(nextPos + 1, second)
+    else tr = tr.insert(nextPos, state.schema.nodes.page.create(null, second))
+    dispatchLayout(view, tr)
+    return true
+  }
+
   // 删除内容后，后页内容应像 Word 一样自动向前回流。
   // 整块能放下时直接前移；文本块至少能容纳一行时先前移，再由溢出逻辑在行末拆开。
   const pullForward = (state, view) => {
@@ -579,8 +727,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       const remaining = getPageContentBottom(currentPage) - lastRect.bottom
       const lineHeight = Number.parseFloat(getComputedStyle(firstDom).lineHeight) || 24
       const fitsWhole = firstRect.height <= remaining + 1
-      const canTakeTextLine = first.isTextblock && remaining >= lineHeight * 1.25
-      if (!fitsWhole && !canTakeTextLine) continue
+      if (!fitsWhole) continue
 
       const currentChildren = []
       const nextChildren = []
@@ -589,14 +736,21 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         if (childIndex > 0) nextChildren.push(child)
       })
 
+      const previous = currentChildren[currentChildren.length - 1]
+      if (first.type.name === 'codeBlock' && first.attrs.continued && previous?.type.name === 'codeBlock') {
+        currentChildren[currentChildren.length - 1] = mergeCodeNodes(previous, first, state.schema)
+      } else {
+        currentChildren.push(first)
+      }
       const replacementPages = [
-        state.schema.nodes.page.create(current.node.attrs, [...currentChildren, first]),
+        state.schema.nodes.page.create(current.node.attrs, currentChildren),
       ]
       if (nextChildren.length) {
         replacementPages.push(state.schema.nodes.page.create(next.node.attrs, nextChildren))
       }
 
-      view.dispatch(
+      dispatchLayout(
+        view,
         state.tr.replaceWith(
           current.pos,
           next.pos + next.node.nodeSize,
@@ -639,7 +793,10 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     if (firstOverflow?.child.isTextblock && firstOverflow.rect.top < contentBottom - 4) {
       const splitPos = findTextSplitPosition(state, view, pageEl, firstOverflow.child, firstOverflow.childPos)
       if (splitPos) {
-        view.dispatch(state.tr.split(splitPos))
+        if (firstOverflow.child.type.name === 'codeBlock') {
+          return splitCodeBlockAcrossPages(state, view, pos, firstOverflow.child, firstOverflow.childPos, splitPos)
+        }
+        dispatchLayout(view, state.tr.split(splitPos))
         return true
       }
     }
@@ -658,7 +815,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     } else {
       tr = tr.insert(nextPos, state.schema.nodes.page.create(null, frag))
     }
-    view.dispatch(tr)
+    dispatchLayout(view, tr)
     return true
   }
   // 每一帧只执行一次分页事务，等待 DOM 完成布局后再测量下一页。
@@ -667,8 +824,14 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     cancelAnimationFrame(reflowRafRef.current)
     const runId = ++reflowRunRef.current
     let steps = 0
+    const seen = new Set()
     const step = () => {
       if (runId !== reflowRunRef.current || !editor || !paged) return
+      const signature = []
+      editor.state.doc.forEach((page) => signature.push(`${page.childCount}:${page.textContent.length}`))
+      const key = signature.join('|')
+      if (seen.has(key)) return
+      seen.add(key)
       const changed = reflow()
       steps += 1
       if (changed && steps < 120) {
@@ -678,23 +841,34 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     reflowRafRef.current = requestAnimationFrame(step)
   }
 
-  // paged 切换：结构转换 + 重排
+  // 版式切换先将内容还原为单一逻辑流，再按目标纸张重新分页。
   useEffect(() => {
     if (!editor) return
+    const enteringPaged = paged && !modeRef.current
+    const layoutChanged = paged && layoutKeyRef.current !== layoutKey
+    reflowRunRef.current += 1
+    cancelAnimationFrame(reflowRafRef.current)
     if (paged) {
-      toPaged()
-      // 等待页面 DOM 布局后逐帧重排
-      runReflow()
+      toPaged(enteringPaged || layoutChanged)
+      requestAnimationFrame(() => {
+        if (enteringPaged && canvasRef.current) {
+          canvasRef.current.scrollTop = 0
+          canvasRef.current.scrollLeft = 0
+        }
+        runReflow()
+      })
     } else {
       toWide()
     }
+    modeRef.current = paged
+    layoutKeyRef.current = layoutKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paged, editor])
+  }, [paged, editor, layoutKey])
 
   // 编辑时实时重排（输入导致溢出自动分页）
   useEffect(() => {
     if (!editor || !paged) return
-    const schedule = () => runReflow()
+    const schedule = () => { if (!reflowingRef.current) runReflow() }
     editor.on('transaction', schedule)
     editor.on('update', schedule)
     return () => {
@@ -732,7 +906,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const canvas = canvasRef.current
     canvas?.addEventListener('scroll', onScroll, { passive: true })
     return () => { mo.disconnect(); clearTimeout(t); canvas?.removeEventListener('scroll', onScroll) }
-  }, [editor, paged])
+  }, [editor, paged, layoutKey, visualScale])
 
   // 选中文字统计：选区变化时上报选中字符数，并定位浮动条
   useEffect(() => {
@@ -807,6 +981,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const { from, to } = editor.state.selection
     const len = from !== to ? editor.state.doc.textBetween(from, to).length : 0
     onSelection?.(len)
+    onSelectionRange?.(from !== to ? { from, to } : null)
     if (from === to) { setBubblePos(null); return }
     const sel = window.getSelection()
     if (!sel?.rangeCount) return
