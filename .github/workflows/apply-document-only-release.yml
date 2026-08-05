@@ -4,6 +4,7 @@ on:
     branches: [release/0.2.0-preview]
     paths:
       - scripts/apply-document-only-release.py
+      - scripts/repair-refactor-script.py
       - scripts/repair-document-source.py
       - scripts/repair-document-tests.py
       - .github/workflows/apply-document-only-release.yml
@@ -23,6 +24,7 @@ jobs:
           cache: npm
       - name: Apply document-only refactor
         run: |
+          python3 scripts/repair-refactor-script.py
           python3 scripts/apply-document-only-release.py
           python3 scripts/repair-document-source.py
           python3 scripts/repair-document-tests.py
