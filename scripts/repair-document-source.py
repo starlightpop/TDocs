@@ -11,7 +11,6 @@ def write(path, text):
 
 editor = read('src/components/Editor.jsx')
 
-# Remove pagination-only attributes from the actual CodeBlock extension without touching TextStyle or marks.
 code_start = editor.find('const CodeBlock = CodeBlockLowlight')
 if code_start < 0:
     raise RuntimeError('CodeBlock declaration missing')
@@ -20,16 +19,14 @@ shortcuts_start = editor.find('  addKeyboardShortcuts()', code_start)
 if attrs_start >= 0 and shortcuts_start > attrs_start:
     editor = editor[:attrs_start] + editor[shortcuts_start:]
 
-old_render = '''          <div className="page-wrap" ref={wrapRef}>
-            <EditorContent editor={editor} className="page document-page" />
-          {ctxMenu && ('''
-new_render = '''          <div className="page-wrap" ref={wrapRef}>
-            <EditorContent editor={editor} className="page document-page" />
-          </div>
-          {ctxMenu && ('''
-if old_render not in editor:
+render_pattern = re.compile(
+    r'(<div className="page-wrap" ref=\{wrapRef\}>\s*<EditorContent editor=\{editor\} className="page document-page"\s*/>)\s*(\{ctxMenu && \()',
+    re.S,
+)
+editor, render_count = render_pattern.subn(r'\1\n          </div>\n          \2', editor, count=1)
+if render_count != 1 and not re.search(r'<EditorContent editor=\{editor\} className="page document-page"\s*/>\s*</div>\s*\{ctxMenu && \(', editor, re.S):
     raise RuntimeError('Editor render repair anchor missing')
-editor = editor.replace(old_render, new_render, 1)
+
 editor = editor.replace(
     '// 浏览器与桌面端统一使用中文自绘编辑菜单；普通输入框由 Electron 提供中文原生菜单。\n  // 浏览器开发模式使用自绘菜单；Electron 正式版使用系统原生编辑菜单。',
     '// 编辑器统一使用中文自绘菜单；普通输入框由 Electron 提供中文原生菜单。',
