@@ -4,6 +4,7 @@ on:
     branches: [release/0.2.0-preview]
     paths:
       - scripts/apply-document-only-release.py
+      - scripts/repair-document-source.py
       - scripts/repair-document-tests.py
       - .github/workflows/apply-document-only-release.yml
 permissions:
@@ -23,10 +24,11 @@ jobs:
       - name: Apply document-only refactor
         run: |
           python3 scripts/apply-document-only-release.py
+          python3 scripts/repair-document-source.py
           python3 scripts/repair-document-tests.py
       - name: Verify Word runtime is removed
         run: |
-          ! grep -RInE "const Page =|PageBreak|runReflow|splitCodeBlockAcrossPages|kind === 'word'|无标题 Word|A4 / B5|Word 排版" src
+          ! grep -RInE "const Page =|PageBreak|runReflow|splitCodeBlockAcrossPages|kind === 'word'|无标题 Word|A4 / B5|Word 排版|lineStart|continued|codeId|pm-page-wrap|manual-page-break|add-word-page" src
           test ! -f src/lib/viewModes.js
       - name: Install dependencies
         run: npm ci
