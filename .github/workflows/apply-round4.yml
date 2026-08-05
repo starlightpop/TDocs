@@ -6,6 +6,7 @@ on:
       - agent/tdocs-word-docs-foundation
     paths:
       - scripts/apply-round4.py
+      - scripts/repair-round4.py
       - .github/workflows/apply-round4.yml
 
 permissions:
@@ -23,6 +24,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Repair staged patch
+        run: python3 scripts/repair-round4.py
       - name: Apply fixes
         run: python3 scripts/apply-round4.py
       - name: Install dependencies
