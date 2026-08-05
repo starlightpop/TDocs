@@ -24,3 +24,13 @@ test('AI 模型菜单只读取已配置厂商', () => {
   assert.match(prompt, /listConfiguredApiConfigs/)
   assert.match(prompt, /尚未配置厂商/)
 })
+
+
+test('续块合并后按合并节点起始行计算下一页行号', () => {
+  assert.match(editor, /normalizedStart \+ countCodeLines\(normalized\.textContent\)/)
+})
+
+const icons = fs.readFileSync('src/components/Icons.jsx', 'utf8')
+test('Word 工作区拥有明确纸张图标', () => {
+  assert.match(icons, /page:\s*\(/)
+})

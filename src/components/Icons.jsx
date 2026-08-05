@@ -122,6 +122,9 @@ export const Icons = {
   folderOpen: (
     <svg viewBox="0 0 24 24" {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V9" /><path d="M3 7v10a2 2 0 0 0 2 2h13.5a1.5 1.5 0 0 0 1.4-1l2-6a1.5 1.5 0 0 0-1.4-2H6a2 2 0 0 0-1.9 1.3L3 14.5z" /></svg>
   ),
+  page: (
+    <svg viewBox="0 0 24 24" {...p}><rect x="5" y="2.5" width="14" height="19" rx="1.5" /><path d="M8 7h8M8 11h8M8 15h6" /></svg>
+  ),
   doc: (
     <svg viewBox="0 0 24 24" {...p}><path d="M6 2h8l5 5v15H6z" /><path d="M14 2v5h5M9 12h7M9 16h7" /></svg>
   ),

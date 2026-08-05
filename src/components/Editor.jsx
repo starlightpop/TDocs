@@ -816,7 +816,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           children.push(normalized)
         }
         if (node.attrs.codeId !== codeId || Boolean(node.attrs.continued) !== continued || Number(node.attrs.lineStart || 1) !== lineStart) changed = true
-        previousLogical = { codeId, nextLine: lineStart + countCodeLines(normalized.textContent) }
+        const normalizedStart = Math.max(1, Number(normalized.attrs.lineStart) || 1)
+        previousLogical = { codeId, nextLine: normalizedStart + countCodeLines(normalized.textContent) }
       })
       pages.push(page.type.create(page.attrs, children))
     })
