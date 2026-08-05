@@ -79,6 +79,28 @@ function normalizeLanguage(value) {
   return aliases[key] || key
 }
 
+function normalizeSource(value) {
+  const text = String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+  const lines = text.split('\n')
+  while (lines.length && lines[0].trim() === '') lines.shift()
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop()
+  if (!lines.length) return ''
+
+  const indents = lines
+    .filter((line) => line.trim())
+    .map((line) => (line.match(/^[ \t]*/) || [''])[0].length)
+  const common = indents.length ? Math.min(...indents) : 0
+  if (!common) return lines.join('\n')
+
+  return lines.map((line) => {
+    if (!line.trim()) return ''
+    const leading = (line.match(/^[ \t]*/) || [''])[0].length
+    return line.slice(Math.min(common, leading))
+  }).join('\n')
+}
+
 function inferLanguage(code) {
   const text = String(code || '')
   if (/^\s*#include\s*</m.test(text)) return /std::|cout\s*<</.test(text) ? 'cpp' : 'c'
@@ -206,7 +228,7 @@ async function compileAndRun(compilers, executable, cwd, timeoutMs) {
 }
 
 async function runCode(payload = {}) {
-  const code = String(payload.code || '')
+  const code = normalizeSource(payload.code || '')
   const requested = normalizeLanguage(payload.language)
 
   if (Buffer.byteLength(code, 'utf8') > MAX_CODE_BYTES) {
@@ -341,6 +363,7 @@ async function runCode(payload = {}) {
 }
 
 module.exports = {
+  normalizeSource,
   inferLanguage,
   normalizeLanguage,
   installHelp,

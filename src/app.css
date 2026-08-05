@@ -3279,3 +3279,69 @@ html.platform-mac .topbar .menu {
 .code-block-shell .code-completion-menu {
   max-width: min(320px, calc(100% - 24px));
 }
+
+
+/* 0.2.0-preview infinite-anchor and code-input repair */
+/* Keep the document boundary, but extend it before the bottom can enter view. */
+.main[data-workspace="document"] .document-page {
+  min-height: var(--infinite-document-min-height, max(4800px, calc(100vh * 5))) !important;
+  padding-bottom: max(960px, calc(100vh + 180px)) !important;
+}
+.editor-content h1,
+.editor-content h2,
+.editor-content h3,
+.editor-content h4,
+.editor-content h5,
+.editor-content h6 {
+  scroll-margin-top: 20px;
+}
+
+/* The old gutter was position:absolute; reset every legacy geometry property. */
+.code-block-body {
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) !important;
+  align-items: stretch !important;
+}
+.code-block-body > .code-gutter {
+  position: static !important;
+  inset: auto !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: 52px !important;
+  min-width: 52px !important;
+  height: auto !important;
+  pointer-events: none !important;
+  text-align: right !important;
+}
+.code-block-body > .code-scroll {
+  position: relative !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scroll-padding-inline: 16px;
+}
+.code-block-body > .code-scroll > pre {
+  position: static !important;
+  display: block !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  overflow: visible !important;
+}
+.editor-content .code-block-shell .code-scroll > pre > .code-editable {
+  position: static !important;
+  left: auto !important;
+  transform: none !important;
+  display: block !important;
+  min-width: 100% !important;
+  padding: 14px 16px !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: var(--text) !important;
+  caret-color: var(--text) !important;
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}

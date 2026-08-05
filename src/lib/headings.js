@@ -13,12 +13,37 @@ export function scrollToHeadingByIndex(editor, index) {
   const nodes = editor?.view?.dom?.querySelectorAll('h1, h2, h3, h4, h5, h6')
   const el = nodes?.[index]
   if (!el) return
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  // 光标同步移到标题处，避免停留在原地
-  const pos = editor.view.posAtDOM(el, 0)
-  if (pos != null) {
-    editor.chain().focus().setTextSelection(pos).run()
+
+  const canvas = el.closest('.canvas') || document.querySelector('.canvas')
+  const page = el.closest('.document-page')
+
+  if (canvas) {
+    const canvasRect = canvas.getBoundingClientRect()
+    const elementRect = el.getBoundingClientRect()
+    const topOffset = 20
+    const targetTop = Math.max(0, canvas.scrollTop + elementRect.top - canvasRect.top - topOffset)
+
+    if (page) {
+      const pageRect = page.getBoundingClientRect()
+      const pageTopInCanvas = canvas.scrollTop + pageRect.top - canvasRect.top
+      const headingTopInPage = Math.max(0, targetTop - pageTopInCanvas)
+      const requiredHeight = headingTopInPage + canvas.clientHeight * 2.25
+      const currentHeight = Number.parseFloat(page.style.getPropertyValue('--infinite-document-min-height')) || page.offsetHeight
+      if (requiredHeight > currentHeight) {
+        page.style.setProperty('--infinite-document-min-height', `${Math.ceil(requiredHeight)}px`)
+      }
+    }
+
+    requestAnimationFrame(() => {
+      canvas.scrollTo({ top: targetTop, behavior: 'smooth' })
+    })
+  } else {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // 同步文档选区，但不调用 focus()，避免 ProseMirror 再次改写滚动位置。
+  const pos = editor.view.posAtDOM(el, 0)
+  if (pos != null) editor.commands.setTextSelection(pos)
 }
 
 /**

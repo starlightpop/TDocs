@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { inferLanguage, runCode } = require('../electron/code-runner.cjs')
+const { inferLanguage, normalizeSource, runCode } = require('../electron/code-runner.cjs')
 
 test('纯文本中的 print 调用识别为 Python', () => {
   assert.equal(inferLanguage('print("p")'), 'python')
@@ -27,6 +27,16 @@ test('print 调用通过 Python 返回直接标准输出', async () => {
   const result = await runCode({ language: 'plaintext', code: 'print("p")' })
   assert.equal(result.ok, true)
   assert.equal(result.language, 'python')
+  assert.equal(result.stdout, 'p')
+  assert.equal(result.stderr, '')
+})
+
+
+test('嵌入代码块的公共缩进会在运行前移除', async () => {
+  assert.equal(normalizeSource('    print("p")'), 'print("p")')
+  assert.equal(normalizeSource('    if True:\n        print("p")'), 'if True:\n    print("p")')
+  const result = await runCode({ language: 'python', code: '    print("p")' })
+  assert.equal(result.ok, true)
   assert.equal(result.stdout, 'p')
   assert.equal(result.stderr, '')
 })
