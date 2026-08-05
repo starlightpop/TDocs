@@ -43,8 +43,16 @@ jobs:
           PY
       - name: Apply page geometry and runtime fixes
         run: node scripts/apply-word-pages-runtime.mjs
-      - name: Restore canonical code runner
-        run: git checkout HEAD -- electron/code-runner.cjs
+      - name: Normalize generated files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          toolbar = Path('src/components/Toolbar.jsx')
+          text = toolbar.read_text()
+          text = text.replace('const insertImage =  const insertImage =', 'const insertImage =')
+          toolbar.write_text(text)
+          PY
+          git checkout HEAD -- electron/code-runner.cjs
       - name: Check Electron syntax
         run: |
           node --check electron/main.cjs
