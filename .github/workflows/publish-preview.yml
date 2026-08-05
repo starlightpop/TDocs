@@ -1,0 +1,45 @@
+name: Publish TDocs 0.2.0 Preview
+
+on:
+  push:
+    branches: [release/0.2.0-preview]
+    paths:
+      - .release/v0.2.0-preview
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests and renderer build
+        run: npm run test:ci
+      - name: Build macOS Apple Silicon packages
+        run: npm run app
+      - name: Verify release assets
+        run: |
+          test -n "$(find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -print -quit)"
+          find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -print
+      - name: Create GitHub pre-release
+        run: |
+          TAG="v0.2.0-preview"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --prerelease --title "TDocs 0.2.0-preview" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" --prerelease --title "TDocs 0.2.0-preview" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA"
+          fi
+          for artifact in release/*.dmg release/*.zip; do
+            [ -f "$artifact" ] || continue
+            gh release upload "$TAG" "$artifact" --clobber
+          done
