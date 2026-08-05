@@ -1,3 +1,4 @@
+// 查找逻辑独立于 UI，可供编辑器高亮、替换和测试共同使用。
 export function findAllTextRanges(text, query, caseSensitive = false) {
   const source = String(text || '')
   const needle = String(query || '')
