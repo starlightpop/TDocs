@@ -80,7 +80,7 @@ export default function Toolbar({ editor, onAi }) {
   const [showFontSize, setShowFontSize] = useState(false)
   const [showFontFamily, setShowFontFamily] = useState(false)
   const [showLangMenu, setShowLangMenu] = useState(false)
-  const [runOutput, setRunOutput] = useState(null) // {text, ok, top, left}
+  const [runOutput, setRunOutput] = useState(null) // 本地运行状态与标准输出
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
 
@@ -123,34 +123,38 @@ export default function Toolbar({ editor, onAi }) {
     }
   }
 
-  // 运行代码块（JavaScript/纯文本可执行，其余语言提示）
-  const runCode = () => {
-    if (!editor?.isActive('codeBlock')) return
-    const lang = editor.getAttributes('codeBlock').language || 'plaintext'
-    const { from } = editor.state.selection
-    const node = editor.state.doc.resolve(from).parent
-    const codeText = node.type.name === 'codeBlock' ? node.textContent : ''
-    const el = editor.view.dom.querySelector('.editor-content pre')
-    const rect = el?.getBoundingClientRect()
-    const pos = rect ? { top: rect.bottom + 10, left: rect.left } : { top: 120, left: 200 }
-    if (lang === 'javascript' || lang === 'plaintext') {
-      const logs = []
-      const origLog = console.log
-      const origPrint = window.print
-      console.log = (...a) => logs.push(a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' '))
-      window.print = () => { logs.push('[print]') } // 屏蔽 window.print，避免误开打印对话框
-      try {
-        const ret = new Function(codeText)()
-        const text = [...logs, ret !== undefined ? String(ret) : ''].filter(Boolean).join('\n')
-        setRunOutput({ text: text || '（无输出）', ok: true, cmd: codeText.trim() || '（空代码）', ...pos })
-      } catch (e) {
-        setRunOutput({ text: String(e?.message || e), ok: false, cmd: codeText.trim() || '（空代码）', ...pos })
-      } finally {
-        console.log = origLog
-        window.print = origPrint
-      }
-    } else {
-      setRunOutput({ text: `当前版本暂不支持运行 ${lang}，请选择「JavaScript」或「纯文本」测试`, ok: false, cmd: `run ${lang}`, ...pos })
+  const getActiveCodeBlock = () => {
+    const { $from } = editor.state.selection
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const node = $from.node(depth)
+      if (node.type.name === 'codeBlock') return { node, pos: $from.before(depth) }
+    }
+    return null
+  }
+
+  // 代码在 Electron 主进程的独立子进程中运行，标准输出和错误输出原样返回。
+  const runCode = async () => {
+    const active = getActiveCodeBlock()
+    if (!active) return
+    const selectedLanguage = editor.getAttributes('codeBlock').language || 'plaintext'
+    const dom = editor.view.nodeDOM(active.pos)
+    const rect = dom?.getBoundingClientRect?.()
+    const width = 480
+    const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect?.left || 180))
+    const preferredTop = (rect?.bottom || 110) + 10
+    const top = preferredTop + 230 < window.innerHeight
+      ? preferredTop
+      : Math.max(12, (rect?.top || 250) - 240)
+    setRunOutput({ running: true, ok: true, stdout: '', stderr: '', language: selectedLanguage, top, left })
+    if (!window.tdocs?.runCode) {
+      setRunOutput({ running: false, ok: false, stdout: '', stderr: '代码运行仅在 TDocs 桌面应用中可用。', language: selectedLanguage, top, left })
+      return
+    }
+    try {
+      const result = await window.tdocs.runCode({ language: selectedLanguage, code: active.node.textContent })
+      setRunOutput({ running: false, ...result, top, left })
+    } catch (error) {
+      setRunOutput({ running: false, ok: false, stdout: '', stderr: String(error?.message || error), language: selectedLanguage, top, left })
     }
   }
 
@@ -430,7 +434,7 @@ export default function Toolbar({ editor, onAi }) {
       {/* 代码块语言选择 + 运行（代码块激活时显示） */}
       {editor.isActive('codeBlock') && (
         <>
-          <button className="tb-sup-sub tb-run-btn" title="运行代码（JavaScript/纯文本）" onClick={runCode}>▶</button>
+          <button className="tb-sup-sub tb-run-btn" title="在本机运行当前代码块" disabled={runOutput?.running} onClick={runCode}>▶</button>
           <div className="menu-wrap">
           <button
             className="tb-block-btn tb-lang-btn"
@@ -461,12 +465,26 @@ export default function Toolbar({ editor, onAi }) {
         <div className="code-terminal" style={{ top: runOutput.top, left: runOutput.left }}>
           <div className="code-terminal-head">
             <span className="code-terminal-dots"><i /><i /><i /></span>
-            <span className="code-terminal-title">代码运行</span>
+            <span className="code-terminal-title">
+              {runOutput.running ? '正在运行' : '运行结果'} · {CODE_LANGS.find(([value]) => value === runOutput.language)?.[1] || runOutput.language}
+            </span>
+            {!runOutput.running && (
+              <span className={`code-terminal-status${runOutput.ok ? ' ok' : ' fail'}`}>
+                {runOutput.ok ? '成功' : runOutput.timedOut ? '超时' : '失败'}
+              </span>
+            )}
             <button className="icon-btn" title="关闭" onClick={() => setRunOutput(null)}><Icon name="x" size={12} /></button>
           </div>
           <div className="code-terminal-body">
-            <pre className="term-cmd"><span className="term-prompt">$</span> {runOutput.cmd}</pre>
-            <pre className={`term-out${runOutput.ok ? '' : ' err'}`}>{runOutput.text}</pre>
+            {runOutput.running ? (
+              <pre className="term-running">正在启动本地运行环境…</pre>
+            ) : (
+              <>
+                {runOutput.stdout ? <pre className="term-out">{runOutput.stdout}</pre> : null}
+                {runOutput.stderr ? <pre className="term-out err">{runOutput.stderr}</pre> : null}
+                {!runOutput.stdout && !runOutput.stderr && runOutput.ok ? <pre className="term-empty">程序运行完成，没有输出。</pre> : null}
+              </>
+            )}
           </div>
         </div>
       )}

@@ -7,17 +7,16 @@ test('未知纸张回退到文档模式', () => {
   assert.equal(viewModeForPaper('unknown'), 'document')
 })
 
-test('A4 页面保持纵横比', () => {
-  const page = resolvePageSize('a4', 700)
-  assert.equal(page.w, 700)
-  assert.ok(Math.abs(page.h / page.w - 1123 / 794) < 0.002)
+test('A4 在 100% 下使用固定 96 CSS DPI 尺寸', () => {
+  assert.deepEqual(resolvePageSize('a4'), { w: 794, h: 1123 })
+  assert.ok(Math.abs(794 / 1123 - 210 / 297) < 0.001)
 })
 
-test('页面宽度有上下界，窄窗口不会被强制撑到 600px', () => {
-  assert.equal(resolvePageSize('a4', 300).w, 420)
-  assert.equal(resolvePageSize('a4', 2000).w, Math.round(794 * 1.15))
+test('B5 使用固定纸张比例', () => {
+  assert.deepEqual(resolvePageSize('b5'), { w: 665, h: 945 })
+  assert.ok(Math.abs(665 / 945 - 176 / 250) < 0.002)
 })
 
 test('文档模式没有固定页高', () => {
-  assert.deepEqual(resolvePageSize('wide', 1200), { w: 880, h: 0 })
+  assert.deepEqual(resolvePageSize('wide'), { w: 880, h: 0 })
 })

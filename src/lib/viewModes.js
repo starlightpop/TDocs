@@ -1,8 +1,9 @@
-// 文档模式与页面模式共享同一份文档数据，只改变渲染尺寸与分页语义。
 export const PAPER_PRESETS = Object.freeze({
   wide: Object.freeze(['文档', 880, 0]),
+  // 96 CSS DPI：210 × 297 mm。100% 缩放时保持稳定版式，不再按窗口任意放大。
   a4: Object.freeze(['A4', 794, 1123]),
-  b5: Object.freeze(['B5', 665, 937]),
+  // ISO B5：176 × 250 mm。
+  b5: Object.freeze(['B5', 665, 945]),
 })
 
 export function normalizePaper(value) {
@@ -13,14 +14,8 @@ export function viewModeForPaper(paper) {
   return normalizePaper(paper) === 'wide' ? 'document' : 'page'
 }
 
-export function resolvePageSize(paper, availableWidth, options = {}) {
+export function resolvePageSize(paper) {
   const normalized = normalizePaper(paper)
-  const [, baseWidth, baseHeight] = PAPER_PRESETS[normalized]
-  if (normalized === 'wide') return { w: baseWidth, h: 0 }
-
-  const minWidth = Number.isFinite(options.minWidth) ? options.minWidth : 420
-  const maxScale = Number.isFinite(options.maxScale) ? options.maxScale : 1.15
-  const safeAvailable = Number.isFinite(availableWidth) ? availableWidth : baseWidth
-  const width = Math.round(Math.min(baseWidth * maxScale, Math.max(minWidth, safeAvailable)))
-  return { w: width, h: Math.round((width * baseHeight) / baseWidth) }
+  const [, w, h] = PAPER_PRESETS[normalized]
+  return { w, h }
 }

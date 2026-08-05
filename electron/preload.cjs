@@ -8,4 +8,6 @@ contextBridge.exposeInMainWorld('tdocs', {
   exportPdf: (payload) => ipcRenderer.invoke('export-pdf', payload),
   // 打开本地文件（系统对话框），返回 [{name, content}]
   openFiles: () => ipcRenderer.invoke('open-files'),
+  // 在独立本地进程中运行当前代码块，返回 stdout / stderr / exitCode。
+  runCode: (payload) => ipcRenderer.invoke('run-code', payload),
 })

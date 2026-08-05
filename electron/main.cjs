@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const { runCode } = require('./code-runner.cjs')
 
 const isMac = process.platform === 'darwin'
 
@@ -70,6 +71,8 @@ function createWindow() {
 
 // ---------- IPC：拖出导出 + PDF ----------
 function registerIpc() {
+  ipcMain.handle('run-code', async (_event, payload) => runCode(payload))
+
   // 文件拖出窗口：写入临时 HTML 文件并交给系统拖拽
   ipcMain.handle('drag-export', async (event, { title, html }) => {
     const safeName = String(title || '未命名').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)

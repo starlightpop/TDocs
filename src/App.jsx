@@ -186,28 +186,8 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-view-mode', viewMode)
   }, [viewMode])
-  // 分页模式页面尺寸：WPS 式“适应宽度”——按视口可用宽度放大，保持 A4/B5 比例，四周只留小边距
-  const [pageSize, setPageSize] = useState(() => {
-    const available = (window.innerWidth - 312) || 968
-    return resolvePageSize(paper, available)
-  })
-  useEffect(() => {
-    const calc = () => {
-      const available = (mainRef.current?.clientWidth || 1040) - 48
-      setPageSize(resolvePageSize(paper, available))
-    }
-    calc()
-    let timer = null
-    const onResize = () => {
-      clearTimeout(timer)
-      timer = setTimeout(calc, 120)
-    }
-    window.addEventListener('resize', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-      clearTimeout(timer)
-    }
-  }, [paper])
+  // 页面模式使用固定物理基准尺寸。缩放只改变整张纸的视觉比例，不改变排版容量。
+  const pageSize = useMemo(() => resolvePageSize(paper), [paper])
   // 分页样式：dashed=虚线分页，split=分离页面（WPS 式每页独立）
   const [breakStyle, setBreakStyle] = useState(() => {
     const saved = localStorage.getItem('inkdocs.breakStyle')
@@ -266,6 +246,8 @@ export default function App() {
   const [rulerOpen, setRulerOpen] = useState(false)
   const rulerRef = useRef(null)
   const rulerDownRef = useRef(null)
+  const zoomAnchorRef = useRef(null)
+  const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
 
   // 拖动标尺灰白交界：连续调整页边距（24~160px）
@@ -276,8 +258,9 @@ export default function App() {
     if (!ruler) return
     const startX = e.clientX
     const startPad = pagePad
+    const scale = paper === 'wide' ? 1 : zoom
     const onMove = (ev) => {
-      const dx = ev.clientX - startX
+      const dx = (ev.clientX - startX) / scale
       const next = Math.min(160, Math.max(24, startPad + dx))
       setPagePad(Math.round(next))
     }
@@ -325,6 +308,35 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('inkdocs.zoom', String(zoom))
   }, [zoom])
+
+  // 缩放菜单始终锚定状态栏按钮。大纲、侧边栏或窗口尺寸变化时重新计算。
+  useEffect(() => {
+    if (!zoomMenuOpen) {
+      setZoomMenuPos(null)
+      return undefined
+    }
+    const anchor = zoomAnchorRef.current
+    if (!anchor) return undefined
+    const update = () => {
+      const rect = anchor.getBoundingClientRect()
+      const width = 144
+      const height = 304
+      const left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.right - width))
+      const top = Math.max(8, rect.top - height - 8)
+      setZoomMenuPos({ top, left })
+    }
+    const frame = requestAnimationFrame(update)
+    const Observer = window.ResizeObserver
+    const observer = Observer ? new Observer(update) : null
+    observer?.observe(anchor)
+    if (mainRef.current) observer?.observe(mainRef.current)
+    window.addEventListener('resize', update)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [zoomMenuOpen, showOutline, sidebarCollapsed])
 
   // 桌面文档的标准查找快捷键；拦截浏览器查找，定位到编辑器内文本。
   useEffect(() => {
@@ -919,7 +931,18 @@ export default function App() {
           onOpenFiles={handleOpenFiles}
         />
 
-        <main className="main" ref={mainRef} style={{ '--doc-zoom': zoom, '--page-width': `${pageSize.w}px`, '--page-h': `${pageSize.h}px`, '--page-pad': `${pagePad}px` }}>
+        <main
+          className="main"
+          ref={mainRef}
+          style={{
+            '--doc-zoom': paper === 'wide' ? zoom : 1,
+            '--page-width': `${paper === 'wide' ? pageSize.w : Math.round(pageSize.w * zoom)}px`,
+            '--page-base-width': `${pageSize.w}px`,
+            '--page-h': `${pageSize.h}px`,
+            '--page-scale': paper === 'wide' ? 1 : zoom,
+            '--page-pad': `${pagePad}px`,
+          }}
+        >
           {activeDoc ? (
             <div className="main-col">
               <Toolbar editor={editor} onAi={openAi} />
@@ -942,18 +965,18 @@ export default function App() {
                 }}
               >
                 <div className="ruler-track">
-                  <div className="ruler-margin-l" style={{ width: `${pagePad}px` }} />
+                  <div className="ruler-margin-l" style={{ width: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }} />
                   <div className="ruler-text" />
-                  <div className="ruler-margin-r" style={{ width: `${pagePad}px` }} />
+                  <div className="ruler-margin-r" style={{ width: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }} />
                 </div>
                 <div
                   className="ruler-grip-l"
-                  style={{ left: `${pagePad}px` }}
+                  style={{ left: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }}
                   onMouseDown={(e) => startRulerDrag(e)}
                 />
                 <div
                   className="ruler-grip-r"
-                  style={{ right: `${pagePad}px` }}
+                  style={{ right: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }}
                   onMouseDown={(e) => startRulerDrag(e)}
                 />
                 {rulerOpen && (
@@ -985,7 +1008,7 @@ export default function App() {
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
-                aiKeepSelection={!!aiPrompt}
+                aiSelection={aiPrompt?.selection || null}
                 aiInline={aiInline}
                 onResolveInline={() => setAiInline(null)}
               />
@@ -994,7 +1017,7 @@ export default function App() {
                 <span>{stats.chars} 字符</span>
                 {selectedChars > 0 && <span className="statusbar-selected">已选 {selectedChars} 字符</span>}
                 <div className="right">
-                  <div className="menu-wrap zoom-wrap">
+                  <div className="menu-wrap zoom-wrap" ref={zoomAnchorRef}>
                     <button
                       className="statusbar-link zoom-main"
                       title="点击恢复 100%；⌘/Ctrl + 滚轮可微调"
@@ -1010,7 +1033,7 @@ export default function App() {
                       <Icon name="chevronDown" size={10} />
                     </button>
                     {zoomMenuOpen && (
-                      <div className="menu zoom-menu" onClick={(e) => e.stopPropagation()}>
+                      <div className="menu zoom-menu" style={zoomMenuPos || undefined} onClick={(e) => e.stopPropagation()}>
                         {[25, 50, 75, 100, 125, 150, 175, 200].map((v) => (
                           <button
                             key={v}

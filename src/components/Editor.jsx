@@ -29,6 +29,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { DOMParser as PMDOMParser, DOMSerializer } from '@tiptap/pm/model'
+import { canSplit } from '@tiptap/pm/transform'
 import { looksLikeMarkdown, renderMarkdown } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
@@ -136,6 +137,9 @@ const Page = Node.create({
   group: 'block',
   content: 'block+',
   defining: true,
+  isolating: true,
+  selectable: false,
+  allowGapCursor: false,
   parseHTML: () => [{ tag: 'div[data-page]' }],
   renderHTML: () => ['div', { 'data-page': 'true' }, 0],
   addNodeView() {
@@ -154,6 +158,8 @@ const Page = Node.create({
           currentNode = nextNode
           return true
         },
+        // 页间距属于画布，不属于可编辑内容。
+        stopEvent: (event) => event.target === wrap,
         destroy: () => { currentNode = null },
       }
     }
@@ -187,10 +193,13 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       const pre = document.createElement('pre')
       const gutter = document.createElement('div')
       gutter.className = 'code-gutter'
+      gutter.setAttribute('aria-hidden', 'true')
+      gutter.contentEditable = 'false'
       const code = document.createElement('code')
       pre.append(gutter, code)
       const render = () => {
-        gutter.textContent = (node.textContent || '').split('\n').map((_, i) => i + 1).join('\n')
+        const count = Math.max(1, ((node.textContent || '').match(/\n/g)?.length || 0) + 1)
+        gutter.textContent = Array.from({ length: count }, (_, i) => i + 1).join('\n')
       }
       render()
       return { dom: pre, contentDOM: code, update: (n) => { node = n; render(); return true } }
@@ -280,7 +289,7 @@ const PagePadExtension = Extension.create({
   },
 })
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiKeepSelection = false, aiInline = null, onResolveInline }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, aiSelection = null, aiInline = null, onResolveInline }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
@@ -294,11 +303,14 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const lastPairsRef = useRef('')
   const reflowRafRef = useRef(0)
   const reflowRunRef = useRef(0)
+  const pagedRef = useRef(paged)
+  pagedRef.current = paged
 
   const extensions = useMemo(
     () => [
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5, 6] },
+        gapcursor: false,
         codeBlock: false, // 用带行号的自定义 CodeBlock
       }),
       CodeBlock,
@@ -337,6 +349,15 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     content: doc?.content || '',
     editorProps: {
       attributes: { class: 'editor-content' },
+      handleDOMEvents: {
+        mousedown: (_view, event) => {
+          if (!pagedRef.current) return false
+          const target = event.target instanceof Element ? event.target : event.target?.parentElement
+          if (target?.closest?.('[data-page]')) return false
+          event.preventDefault()
+          return true
+        },
+      },
       handleDrop: (view, event) => {
         const file = event.dataTransfer?.files?.[0]
         if (!file) return false
@@ -480,11 +501,48 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const content = blocks.length ? blocks : [state.schema.nodes.paragraph.create()]
     editor.view.dispatch(state.tr.replaceWith(0, state.doc.content.size, content))
   }
-  // 溢出重排：每页内容超出页高时，把页尾块移到下一页（新建或追加）
+  // 溢出重排：按真实纸张内容区测量。文本块跨页时先在可见行末拆分，再移动尾部。
+  const getPageContentBottom = (pageEl) => {
+    const rect = pageEl.getBoundingClientRect()
+    const scale = pageEl.offsetHeight ? rect.height / pageEl.offsetHeight : 1
+    const paddingBottom = Number.parseFloat(getComputedStyle(pageEl).paddingBottom) || 0
+    return rect.bottom - paddingBottom * scale
+  }
+
+  const findTextSplitPosition = (state, view, pageEl, child, childPos) => {
+    const start = childPos + 1
+    const end = start + child.content.size
+    if (!child.isTextblock || end - start < 2) return null
+    const limit = getPageContentBottom(pageEl) - 2
+    let low = start + 1
+    let high = end - 1
+    let best = null
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2)
+      const rect = view.coordsAtPos(mid)
+      if (rect.bottom <= limit) {
+        best = mid
+        low = mid + 1
+      } else {
+        high = mid - 1
+      }
+    }
+    if (!best) return null
+    let candidate = best
+    if (child.type.name === 'codeBlock') {
+      const offset = Math.max(0, candidate - start)
+      const prefix = child.textBetween(0, offset, '\n', '\n')
+      const lineEnd = prefix.lastIndexOf('\n')
+      if (lineEnd > 0) candidate = start + lineEnd + 1
+    }
+    while (candidate > start && !canSplit(state.doc, candidate)) candidate -= 1
+    if (candidate <= start || candidate >= end || !canSplit(state.doc, candidate)) return null
+    return candidate
+  }
+
   const reflow = () => {
     if (!editor || !paged) return false
     const { view, state } = editor
-    // 收集第一个溢出页（不 dispatch，避免遍历中改 state）
     let target = null
     state.doc.descendants((node, pos) => {
       if (target || node.type.name !== 'page') return
@@ -492,32 +550,49 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       if (!dom) return
       const pageEl = dom.nodeType === 1 && dom.matches('[data-page]') ? dom : dom.querySelector('[data-page]')
       if (!pageEl) return
-      const overflow = pageEl.scrollHeight - pageEl.clientHeight
-      if (overflow > 2 && node.childCount > 1) {
-        target = { node, pos }
-      }
+      if (pageEl.scrollHeight - pageEl.clientHeight > 2) target = { node, pos, pageEl }
     })
     if (!target) return false
-    const { node, pos } = target
+
+    const { node, pos, pageEl } = target
+    const contentBottom = getPageContentBottom(pageEl)
+    let offset = 0
+    let firstOverflow = null
+    node.forEach((child) => {
+      const childPos = pos + 1 + offset
+      const childDom = view.nodeDOM(childPos)
+      const rect = childDom?.getBoundingClientRect?.()
+      if (!firstOverflow && rect && rect.bottom > contentBottom + 1) {
+        firstOverflow = { child, childPos, rect }
+      }
+      offset += child.nodeSize
+    })
+
+    if (firstOverflow?.child.isTextblock && firstOverflow.rect.top < contentBottom - 4) {
+      const splitPos = findTextSplitPosition(state, view, pageEl, firstOverflow.child, firstOverflow.childPos)
+      if (splitPos) {
+        view.dispatch(state.tr.split(splitPos))
+        return true
+      }
+    }
+
+    if (node.childCount <= 1) return false
     const last = node.lastChild
     const lastFrom = pos + 1 + node.content.size - last.nodeSize
     const lastTo = lastFrom + last.nodeSize
     const frag = last.copy(last.content)
-    let tr = state.tr
-    tr = tr.delete(lastFrom, lastTo)
+    let tr = state.tr.delete(lastFrom, lastTo)
     const pageSize = tr.doc.nodeAt(pos)?.nodeSize || 1
     const nextPos = pos + pageSize
     const after = tr.doc.nodeAt(nextPos)
     if (after?.type.name === 'page') {
       tr = tr.insert(nextPos + 1, frag)
     } else {
-      const newPage = state.schema.nodes.page.create(null, frag)
-      tr = tr.insert(nextPos, newPage)
+      tr = tr.insert(nextPos, state.schema.nodes.page.create(null, frag))
     }
     view.dispatch(tr)
     return true
   }
-
   // 每一帧只执行一次分页事务，等待 DOM 完成布局后再测量下一页。
   // 旧实现使用同步 while 连续 dispatch，后续测量读取的是旧 DOM，容易产生空页、卡顿和错误分页。
   const runReflow = () => {
@@ -603,19 +678,17 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
-  // AI 改写窗口打开时：保持选区高亮可见（编辑器失焦也不消失）
+  // AI 面板打开后使用请求发起时保存的范围，不受后续光标移动影响。
   useEffect(() => {
     if (!editor) return
-    const decos = []
-    if (aiKeepSelection) {
-      const { from, to } = editor.state.selection
-      if (from !== to) {
-        decos.push(Decoration.inline(from, to, { class: 'ai-sel-highlight' }))
-      }
-    }
+    const max = editor.state.doc.content.size
+    const from = Math.max(0, Math.min(max, Number(aiSelection?.from)))
+    const to = Math.max(from, Math.min(max, Number(aiSelection?.to)))
+    const decos = Number.isFinite(from) && Number.isFinite(to) && from < to
+      ? [Decoration.inline(from, to, { class: 'ai-sel-highlight' })]
+      : []
     editor.view.dispatch(editor.state.tr.setMeta(aiSelKey, decos.length ? decos : null))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiKeepSelection, editor])
+  }, [aiSelection, editor])
 
   // 分页模式：真分页由页节点（data-page）+ 溢出重排实现，旧的分页位置计算不再需要
   useEffect(() => {
@@ -682,6 +755,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         // 点击编辑器内容外的空白：光标移到点击处（可退出代码块）
         const content = wrapRef.current?.querySelector('.editor-content')
         if (!editor || !content || content.contains(e.target)) return
+        if (paged) return
         if (e.target.closest?.('.bubble-wrap, .ai-accept-card, .menu, .overlay')) return
         if (e.button !== 0) return
         const res = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
