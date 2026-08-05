@@ -38,21 +38,13 @@ jobs:
           text = text.replace("`run('${escaped}')`", "\"run('\" + escaped + \"')\"")
           text = text.replace("`当前版本没有配置 ${language} 的本地运行器。`", "'当前版本没有配置 ' + language + ' 的本地运行器。'")
           text = text.replace("`本机没有安装 ${language} 运行环境，或运行程序不在 PATH 中。`", "'本机没有安装 ' + language + ' 运行环境，或运行程序不在 PATH 中。'")
-
-          # 施工脚本中的模板主要用于生成 App/Editor/CSS 源码，禁止在施工阶段提前求值。
           text = re.sub(r'(?<!\\)\$\{', r'\\${', text)
-
-          # code-runner 本身是嵌套在模板字符串中的源码。其正则和字符串里的换行需要再转义一层。
-          marker = "write('electron/code-runner.cjs', `"
-          start = text.index(marker)
-          end = text.index("\n`)\n\nlet css", start)
-          runner = text[start:end]
-          runner = runner.replace('\\r', '\\\\r').replace('\\n', '\\\\n')
-          text = text[:start] + runner + text[end:]
           path.write_text(text)
           PY
       - name: Apply page geometry and runtime fixes
         run: node scripts/apply-word-pages-runtime.mjs
+      - name: Restore canonical code runner
+        run: git checkout HEAD -- electron/code-runner.cjs
       - name: Check Electron syntax
         run: |
           node --check electron/main.cjs
