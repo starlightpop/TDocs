@@ -2,7 +2,7 @@ name: TDocs CI
 
 on:
   push:
-    branches: [main, agent/tdocs-word-docs-foundation]
+    branches: [main, agent/tdocs-word-docs-foundation, release/0.2.0-preview]
   pull_request:
     branches: [main]
 
