@@ -1,6 +1,7 @@
 name: Apply TDocs foundation refactor
 
 on:
+  workflow_dispatch:
   push:
     branches: [agent/tdocs-word-docs-foundation]
     paths:
@@ -39,5 +40,5 @@ jobs:
           git config user.name "TDocs Refactor Bot"
           git config user.email "actions@users.noreply.github.com"
           git add src package.json tests
-          git commit -m "foundation: apply document and page mode refactor"
+          git commit -m "foundation apply: document and page mode refactor"
           git push origin HEAD:agent/tdocs-word-docs-foundation
