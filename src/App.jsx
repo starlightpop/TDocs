@@ -77,6 +77,8 @@ const WELCOME_HTML = `
 <blockquote><p>文档内容与配置默认保存在本机。AI 请求和外部下载只在你主动使用对应功能时发生。</p></blockquote>
 `
 
+const WELCOME_SEED_KEY = 'inkdocs.welcomeSeed.0.2.0-preview'
+
 export default function App() {
   // ---------- 主题：支持 跟随系统 / 浅色 / 深色 ----------
   const [themePref, setThemePref] = useState(loadTheme)
@@ -261,10 +263,30 @@ export default function App() {
   // ---------- 文档 ----------
   const [docs, setDocs] = useState(() => {
     const existing = loadDocs()
-    if (existing.length) return existing
-    const welcomeDoc = createDoc('欢迎使用 TDocs', WELCOME_HTML, { pinned: true, isWelcome: true })
-    saveDocs([welcomeDoc])
-    return [welcomeDoc]
+    const welcomeIndex = existing.findIndex((doc) => doc.isWelcome || doc.title === '欢迎使用 TDocs')
+    if (welcomeIndex >= 0) {
+      const current = existing[welcomeIndex]
+      const welcomeDoc = {
+        ...current,
+        title: '欢迎使用 TDocs',
+        content: WELCOME_HTML,
+        pinned: true,
+        isWelcome: true,
+        group: '',
+      }
+      const next = [welcomeDoc, ...existing.filter((_doc, index) => index !== welcomeIndex)]
+      localStorage.setItem(WELCOME_SEED_KEY, '1')
+      saveDocs(next)
+      return next
+    }
+    if (localStorage.getItem(WELCOME_SEED_KEY) !== '1') {
+      const welcomeDoc = createDoc('欢迎使用 TDocs', WELCOME_HTML, { pinned: true, isWelcome: true })
+      const next = [welcomeDoc, ...existing]
+      localStorage.setItem(WELCOME_SEED_KEY, '1')
+      saveDocs(next)
+      return next
+    }
+    return existing
   })
   const [activeId, setActiveId] = useState(() => {
     const id = loadActiveId()

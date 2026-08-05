@@ -80,6 +80,20 @@ export default function Toolbar({ editor, onAi, isWord = false }) {
 
   if (!editor) return null
 
+  const inCodeBlock = editor.isActive('codeBlock')
+  if (inCodeBlock) {
+    return (
+      <div className="toolbar code-context-toolbar">
+        <TB icon="undo" title="撤销 (⌘Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
+        <TB icon="redo" title="重做 (⌘⇧Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
+        {isWord && <TB icon="page" title="在代码块后插入分页符" onClick={() => editor.chain().focus().insertPageBreak().run()} />}
+        <div className="divider" />
+        <span className="code-context-label"><Icon name="codeBlock" size={15} />代码编辑</span>
+        <span className="code-context-hint">语言、补全和运行位于代码块内部；右键使用系统编辑菜单</span>
+      </div>
+    )
+  }
+
   const blockValue = (() => {
     if (editor.isActive('heading', { level: 1 })) return 'h1'
     if (editor.isActive('heading', { level: 2 })) return 'h2'

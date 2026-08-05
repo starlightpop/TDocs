@@ -5,7 +5,6 @@ const LEGACY_STORE = 'inkdocs.api.v1'
 const API_STORE = 'inkdocs.api.v2'
 
 export function inferProviderId(profile = {}) {
-  if (profile.provider && profile.provider !== 'custom') return profile.provider
   const base = String(profile.baseUrl || '').toLowerCase()
   const model = String(profile.model || '').toLowerCase()
   const rules = [
@@ -22,7 +21,7 @@ export function inferProviderId(profile = {}) {
   if (/^glm[-/]/.test(model)) return 'zhipu'
   if (/^kimi[-/]/.test(model)) return 'moonshot'
   if (/^gpt[-/]/.test(model)) return 'openai'
-  return profile.provider || 'custom'
+  return profile.provider && profile.provider !== 'custom' ? profile.provider : 'custom'
 }
 
 function normalizeProfile(profile = {}, providerId = null) {
@@ -49,7 +48,7 @@ export function loadApiStore() {
       const value = JSON.parse(raw)
       const profiles = {}
       for (const [storedId, profile] of Object.entries(value.profiles || {})) {
-        const id = profile?.provider && profile.provider !== 'custom' ? profile.provider : inferProviderId(profile)
+        const id = inferProviderId(profile)
         profiles[id] = normalizeProfile(profile, id)
       }
       const configured = configuredProfiles({ profiles })

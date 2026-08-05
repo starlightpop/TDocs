@@ -3169,3 +3169,8 @@ html.platform-mac .topbar .menu {
   cursor: pointer;
 }
 .add-word-page:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+
+.code-context-toolbar { min-height: 54px; }
+.code-context-label { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; font-weight: 600; }
+.code-context-hint { color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
