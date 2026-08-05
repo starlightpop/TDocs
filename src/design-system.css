@@ -1,0 +1,238 @@
+/* TDocs 设计系统：统一桌面文档与在线文档两种工作模式的视觉语言 */
+:root {
+  --radius-control: 7px;
+  --radius-panel: 10px;
+  --radius-dialog: 14px;
+  --control-h: 32px;
+  --topbar-h: 52px;
+  --toolbar-h: 46px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  --panel-shadow: 0 12px 36px rgba(17, 24, 39, 0.14), 0 2px 8px rgba(17, 24, 39, 0.08);
+  --floating-shadow: 0 18px 48px rgba(17, 24, 39, 0.2), 0 3px 10px rgba(17, 24, 39, 0.1);
+}
+
+[data-theme='dark'] {
+  --bg: #111318;
+  --bg-canvas: #171a20;
+  --surface: #1d2027;
+  --surface-2: #242832;
+  --surface-3: #2c313c;
+  --text: #f1f3f7;
+  --text-2: #b6bcc8;
+  --text-3: #7f8796;
+  --border: #303642;
+  --border-strong: #414957;
+  --page-bg: #20242c;
+  --page-shadow: 0 0 0 1px rgba(255,255,255,.055), 0 16px 44px rgba(0,0,0,.3);
+  --scrollbar-thumb: #4a5261;
+  --accent-text: #0d1117;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+.btn,
+.icon-btn,
+.tb-block-btn,
+.statusbar-link,
+.zoom-arrow,
+.menu-item,
+.settings-seg button {
+  border-radius: var(--radius-control) !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role='button']:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.topbar {
+  min-height: var(--topbar-h);
+  padding-inline: 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.brand {
+  min-width: 88px;
+  letter-spacing: -0.02em;
+}
+
+.doc-title-input {
+  height: 34px;
+  max-width: min(460px, 38vw);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-weight: 600;
+}
+
+.doc-title-input:hover { background: var(--surface-2); }
+.doc-title-input:focus { background: var(--surface); border-color: var(--border-strong); }
+
+.toolbar {
+  min-height: var(--toolbar-h);
+  padding: 6px 10px;
+  gap: 3px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(0,0,0,.02);
+}
+
+.icon-btn,
+.tb-block-btn,
+.btn {
+  min-height: var(--control-h);
+}
+
+.icon-btn:hover,
+.tb-block-btn:hover,
+.btn:hover,
+.statusbar-link:hover {
+  background: var(--surface-2);
+}
+
+.icon-btn.active,
+.tb-block-btn.active,
+.statusbar-link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.menu,
+.ai-prompt,
+.ai-accept-card,
+.context-menu,
+.modal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel) !important;
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.modal { border-radius: var(--radius-dialog) !important; }
+.menu { padding: 6px; }
+.menu-item { min-height: 34px; padding-inline: 10px; }
+.menu-item.active { background: var(--accent-soft); color: var(--accent); }
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.doc-item,
+.group-row,
+.outline-item {
+  border-radius: var(--radius-control) !important;
+}
+
+.doc-item.active {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.canvas {
+  background:
+    radial-gradient(circle at 50% -20%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 42%),
+    var(--bg-canvas);
+}
+
+[data-view-mode='document'] .page-wrap {
+  padding: 34px clamp(20px, 5vw, 72px) 72px;
+}
+
+[data-view-mode='document'] .page:not(.paged) {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 12px;
+  box-shadow: var(--page-shadow);
+}
+
+[data-view-mode='page'] .ruler { display: flex; }
+[data-view-mode='document'] .ruler { opacity: .72; }
+
+.pm-page-wrap {
+  border-radius: 2px;
+  box-shadow: var(--page-shadow);
+  overflow: clip;
+}
+
+.pm-page-wrap + .pm-page-wrap { margin-top: 28px; }
+.pm-page-label { color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.statusbar {
+  min-height: 30px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-prompt {
+  width: min(520px, calc(100vw - 32px));
+  border-radius: 12px !important;
+  box-shadow: var(--floating-shadow);
+}
+
+.ai-prompt-head {
+  min-height: 38px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.ai-quick-action {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px !important;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ai-quick-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ai-inline-old {
+  color: var(--text-3);
+  text-decoration-color: color-mix(in srgb, var(--danger) 70%, transparent);
+}
+
+.ai-inline-new {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--success) 17%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+@media (max-width: 860px) {
+  .brand span { display: none; }
+  .brand { min-width: auto; }
+  .save-status { display: none; }
+  .doc-title-input { max-width: 42vw; }
+  [data-view-mode='document'] .page-wrap { padding-inline: 12px; }
+}

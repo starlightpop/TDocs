@@ -1,0 +1,29 @@
+name: TDocs CI
+
+on:
+  push:
+    branches: [main, agent/tdocs-word-docs-foundation]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'foundation: apply')
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:ci
+      - name: Verify Electron directory build on macOS
+        if: runner.os == 'macOS'
+        run: npm run app:dir
