@@ -35,6 +35,7 @@ import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
 import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
+import CodeTerminal from './CodeTerminal.jsx'
 import { SearchHighlightExtension } from '../extensions/SearchHighlight.js'
 import { CODE_LANGUAGES, getCodeLanguageLabel, resolveCodeCompletion } from '../lib/codeLanguage.js'
 
@@ -172,7 +173,7 @@ const Page = Node.create({
   },
 })
 
-// ---------- 代码块：语法高亮（lowlight）+ 默认行号（自定义 NodeView） ----------
+// ---------- 代码块：语法高亮、连续行号、当前行高亮与块内运行 ----------
 const lowlight = createLowlight()
 lowlight.register('c', c)
 lowlight.register('cpp', cpp)
@@ -181,6 +182,9 @@ lowlight.register('javascript', javascript)
 lowlight.register('python', python)
 lowlight.register('rust', rust)
 lowlight.register('matlab', matlab)
+const createCodeId = () => `code-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const countCodeLines = (text) => Math.max(1, String(text || '').split('\n').length)
+
 const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
   addAttributes() {
     return {
@@ -194,6 +198,11 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         default: false,
         parseHTML: (element) => element.dataset.continued === 'true',
         renderHTML: (attrs) => (attrs.continued ? { 'data-continued': 'true' } : {}),
+      },
+      codeId: {
+        default: null,
+        parseHTML: (element) => element.dataset.codeId || null,
+        renderHTML: (attrs) => (attrs.codeId ? { 'data-code-id': attrs.codeId } : {}),
       },
     }
   },
@@ -229,11 +238,8 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         const after = $from.after(depth)
         const next = state.doc.nodeAt(after)
         let tr = state.tr
-        let target = after + 1
-        if (next?.type.name !== 'paragraph') {
-          tr = tr.insert(after, state.schema.nodes.paragraph.create())
-        }
-        target = Math.min(tr.doc.content.size, target)
+        if (next?.type.name !== 'paragraph') tr = tr.insert(after, state.schema.nodes.paragraph.create())
+        const target = Math.min(tr.doc.content.size, after + 1)
         tr = tr.setSelection(TextSelection.near(tr.doc.resolve(target))).scrollIntoView()
         view.dispatch(tr)
         return true
@@ -250,7 +256,8 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       head.contentEditable = 'false'
       const title = document.createElement('span')
       title.className = 'code-block-title'
-      title.textContent = '代码'
+      const actions = document.createElement('div')
+      actions.className = 'code-block-head-actions'
       const select = document.createElement('select')
       select.className = 'code-language-select'
       select.setAttribute('aria-label', '代码语言')
@@ -260,13 +267,33 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         option.textContent = label
         select.append(option)
       }
+      const runButton = document.createElement('button')
+      runButton.type = 'button'
+      runButton.className = 'code-run-btn'
+      runButton.title = '运行整个逻辑代码块'
+      runButton.textContent = '▶ 运行'
       select.addEventListener('change', () => {
         const pos = getPos()
         if (typeof pos !== 'number') return
-        const attrs = { ...node.attrs, language: select.value }
-        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, attrs))
+        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, language: select.value }))
       })
-      head.append(title, select)
+      runButton.addEventListener('click', () => {
+        const pos = getPos()
+        if (typeof pos !== 'number') return
+        const rect = shell.getBoundingClientRect()
+        shell.dispatchEvent(new CustomEvent('tdocs:run-code', {
+          bubbles: true,
+          detail: {
+            pos,
+            codeId: node.attrs.codeId || null,
+            code: node.textContent,
+            language: node.attrs.language || 'plaintext',
+            anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+          },
+        }))
+      })
+      actions.append(select, runButton)
+      head.append(title, actions)
 
       const pre = document.createElement('pre')
       const gutter = document.createElement('div')
@@ -282,15 +309,38 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       footer.textContent = 'Tab 补全 · ⌘C / Ctrl+C 退出代码块'
       shell.append(head, pre, footer)
 
+      const syncActiveLine = () => {
+        const spans = [...gutter.children]
+        spans.forEach((span) => span.classList.remove('active'))
+        const pos = getPos()
+        if (typeof pos !== 'number') return
+        const from = view.state.selection.from
+        const start = pos + 1
+        const end = start + node.content.size
+        if (from < start || from > end) return
+        const offset = Math.max(0, Math.min(node.content.size, from - start))
+        const before = node.textBetween(0, offset, '\n', '\n')
+        const lineIndex = (before.match(/\n/g) || []).length
+        spans[lineIndex]?.classList.add('active')
+      }
+
       const render = () => {
-        const count = Math.max(1, ((node.textContent || '').match(/\n/g)?.length || 0) + 1)
+        const count = countCodeLines(node.textContent)
         const start = Math.max(1, Number(node.attrs.lineStart) || 1)
-        gutter.textContent = Array.from({ length: count }, (_, index) => start + index).join('\n')
+        gutter.replaceChildren(...Array.from({ length: count }, (_, index) => {
+          const span = document.createElement('span')
+          span.textContent = String(start + index)
+          return span
+        }))
         select.value = node.attrs.language || 'plaintext'
         title.textContent = node.attrs.continued ? '代码 · 续' : '代码'
         shell.dataset.language = getCodeLanguageLabel(select.value)
+        shell.dataset.codeId = node.attrs.codeId || ''
         shell.classList.toggle('continued', Boolean(node.attrs.continued))
+        syncActiveLine()
       }
+      const onSelection = () => syncActiveLine()
+      view.dom.addEventListener('tdocs:code-selection', onSelection)
       render()
       return {
         dom: shell,
@@ -302,6 +352,7 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
           return true
         },
         stopEvent: (event) => Boolean(event.target.closest?.('.code-block-head, .code-block-footer')),
+        destroy: () => view.dom.removeEventListener('tdocs:code-selection', onSelection),
       }
     }
   },
@@ -392,6 +443,7 @@ const PagePadExtension = Extension.create({
 export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, paged = false, pageH = 0, breakStyle = 'dashed', pageLabelStyle = 'total', onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline, layoutKey = '', visualScale = 1 }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
+  const [terminalRun, setTerminalRun] = useState(null)
   const [breakOffsets, setBreakOffsets] = useState([])
   const wrapRef = useRef(null)
   const pageMetaRef = useRef({ top: 64, left: 0, width: 0 })
@@ -540,6 +592,37 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     },
   })
 
+  useEffect(() => {
+    if (!editor) return undefined
+    const root = editor.view.dom
+    const handleRun = async (event) => {
+      const detail = event.detail || {}
+      let code = detail.code || ''
+      if (detail.codeId) {
+        const fragments = []
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name === 'codeBlock' && node.attrs.codeId === detail.codeId) fragments.push({ pos, text: node.textContent })
+        })
+        if (fragments.length) code = fragments.sort((a, b) => a.pos - b.pos).map((item) => item.text).join('\n')
+      }
+      const id = `${Date.now()}-${Math.random()}`
+      const base = { id, running: true, ok: true, stdout: '', stderr: '', language: detail.language || 'plaintext', anchor: detail.anchor }
+      setTerminalRun(base)
+      if (!window.tdocs?.runCode) {
+        setTerminalRun((current) => current?.id === id ? { ...current, running: false, ok: false, stderr: '代码运行仅在 TDocs 桌面应用中可用。' } : current)
+        return
+      }
+      try {
+        const result = await window.tdocs.runCode({ language: base.language, code })
+        setTerminalRun((current) => current?.id === id ? { ...current, running: false, ...result } : current)
+      } catch (error) {
+        setTerminalRun((current) => current?.id === id ? { ...current, running: false, ok: false, stderr: String(error?.message || error) } : current)
+      }
+    }
+    root.addEventListener('tdocs:run-code', handleRun)
+    return () => root.removeEventListener('tdocs:run-code', handleRun)
+  }, [editor])
+
   // 初始化统计 + 向父级暴露 editor 实例
   useEffect(() => {
     if (editor) {
@@ -554,9 +637,12 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   }, [editor])
 
   const mergeCodeNodes = (left, right, schema) => {
-    const text = `${left.textContent || ''}\n${right.textContent || ''}`
+    const leftText = left.textContent || ''
+    const rightText = right.textContent || ''
+    const separator = !leftText || !rightText || leftText.endsWith('\n') || rightText.startsWith('\n') ? '' : '\n'
+    const text = `${leftText}${separator}${rightText}`
     return left.type.create(
-      { ...left.attrs, lineStart: Math.max(1, Number(left.attrs.lineStart) || 1), continued: Boolean(left.attrs.continued) },
+      { ...left.attrs, codeId: left.attrs.codeId || right.attrs.codeId || createCodeId(), lineStart: Math.max(1, Number(left.attrs.lineStart) || 1), continued: Boolean(left.attrs.continued) },
       text ? schema.text(text) : null,
     )
   }
@@ -674,22 +760,68 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const beforeText = text.slice(0, cut)
     const afterText = text.slice(cut + 1)
     const startLine = Math.max(1, Number(child.attrs.lineStart) || 1)
+    const codeId = child.attrs.codeId || createCodeId()
     const consumedLines = beforeText.split('\n').length
     const first = child.type.create(
-      { ...child.attrs, lineStart: startLine },
+      { ...child.attrs, codeId, lineStart: startLine },
       beforeText ? state.schema.text(beforeText) : null,
     )
     const second = child.type.create(
-      { ...child.attrs, lineStart: startLine + consumedLines, continued: true },
+      { ...child.attrs, codeId, lineStart: startLine + consumedLines, continued: true },
       afterText ? state.schema.text(afterText) : null,
     )
     let tr = state.tr.replaceWith(childPos, childPos + child.nodeSize, first)
     const currentPage = tr.doc.nodeAt(pagePos)
     const nextPos = pagePos + currentPage.nodeSize
     const nextPage = tr.doc.nodeAt(nextPos)
-    if (nextPage?.type.name === 'page') tr = tr.insert(nextPos + 1, second)
-    else tr = tr.insert(nextPos, state.schema.nodes.page.create(null, second))
+    if (nextPage?.type.name === 'page') {
+      const firstNext = nextPage.firstChild
+      if (firstNext?.type.name === 'codeBlock' && firstNext.attrs.continued) {
+        const healedNext = firstNext.type.create({ ...firstNext.attrs, codeId, continued: true }, firstNext.content, firstNext.marks)
+        const merged = mergeCodeNodes(second, healedNext, state.schema)
+        tr = tr.replaceWith(nextPos + 1, nextPos + 1 + firstNext.nodeSize, merged)
+      } else {
+        tr = tr.insert(nextPos + 1, second)
+      }
+    } else tr = tr.insert(nextPos, state.schema.nodes.page.create(null, second))
     dispatchLayout(view, tr)
+    return true
+  }
+
+  const normalizeCodeFragments = (state, view) => {
+    if (state.doc.firstChild?.type.name !== 'page') return false
+    let changed = false
+    let previousLogical = null
+    const pages = []
+    state.doc.forEach((page) => {
+      if (page.type.name !== 'page') { pages.push(page); previousLogical = null; return }
+      const children = []
+      page.forEach((node) => {
+        if (node.type.name !== 'codeBlock') {
+          children.push(node)
+          previousLogical = null
+          return
+        }
+        const wantsContinuation = Boolean(node.attrs.continued)
+        const codeId = node.attrs.codeId || (wantsContinuation ? previousLogical?.codeId : null) || createCodeId()
+        const continued = wantsContinuation && Boolean(previousLogical)
+        const lineStart = continued ? previousLogical.nextLine : 1
+        let normalized = node.type.create({ ...node.attrs, codeId, continued, lineStart }, node.content, node.marks)
+        const previousOnPage = children[children.length - 1]
+        if (continued && previousOnPage?.type.name === 'codeBlock' && previousOnPage.attrs.codeId === codeId) {
+          normalized = mergeCodeNodes(previousOnPage, normalized, state.schema)
+          children[children.length - 1] = normalized
+          changed = true
+        } else {
+          children.push(normalized)
+        }
+        if (node.attrs.codeId !== codeId || Boolean(node.attrs.continued) !== continued || Number(node.attrs.lineStart || 1) !== lineStart) changed = true
+        previousLogical = { codeId, nextLine: lineStart + countCodeLines(normalized.textContent) }
+      })
+      pages.push(page.type.create(page.attrs, children))
+    })
+    if (!changed) return false
+    dispatchLayout(view, state.tr.replaceWith(0, state.doc.content.size, pages))
     return true
   }
 
@@ -765,6 +897,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const reflow = () => {
     if (!editor || !paged) return false
     const { view, state } = editor
+    if (normalizeCodeFragments(state, view)) return true
     let target = null
     state.doc.descendants((node, pos) => {
       if (target || node.type.name !== 'page') return
@@ -828,7 +961,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const step = () => {
       if (runId !== reflowRunRef.current || !editor || !paged) return
       const signature = []
-      editor.state.doc.forEach((page) => signature.push(`${page.childCount}:${page.textContent.length}`))
+      editor.state.doc.forEach((page) => {
+        const parts = []
+        page.forEach((child) => parts.push(`${child.type.name}:${child.textContent.length}:${child.attrs?.lineStart || ''}:${child.attrs?.continued || ''}:${child.attrs?.codeId || ''}`))
+        signature.push(parts.join(','))
+      })
       const key = signature.join('|')
       if (seen.has(key)) return
       seen.add(key)
@@ -982,6 +1119,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const len = from !== to ? editor.state.doc.textBetween(from, to).length : 0
     onSelection?.(len)
     onSelectionRange?.(from !== to ? { from, to } : null)
+    editor.view.dom.dispatchEvent(new CustomEvent('tdocs:code-selection'))
     if (from === to) { setBubblePos(null); return }
     const sel = window.getSelection()
     if (!sel?.rangeCount) return
@@ -1019,6 +1157,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         setCtxMenu({ x: e.clientX, y: e.clientY })
       }}
     >
+      <CodeTerminal run={terminalRun} onClose={() => setTerminalRun(null)} />
       <BubbleBar editor={editor} pos={bubblePos} onAi={onAi} />
       {/* AI 内联 diff 接受卡片 */}
       {aiInline && <AiAcceptCard editor={editor} diff={aiInline} onResolve={onResolveInline} />}

@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar.jsx'
 import Toolbar from './components/Toolbar.jsx'
 import Editor from './components/Editor.jsx'
 import Outline from './components/Outline.jsx'
-import AiPanel from './components/AiPanel.jsx'
+import SettingsDialog from './components/SettingsDialog.jsx'
 import AiPrompt from './components/AiPrompt.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import VersionHistory from './components/VersionHistory.jsx'
@@ -289,13 +289,18 @@ export default function App() {
 
   // ---------- AI ----------
   const [aiPrompt, setAiPrompt] = useState(null) // {editor, selection, pos}
-  const [aiConfigOpen, setAiConfigOpen] = useState(false)
   const [aiInline, setAiInline] = useState(null) // 内联 diff 接受/撤销 {from, to, oldHtml, newHtml}
 
   // 大纲点击跳转后的滚动抑制，避免高亮被滚回上一个标题
   const jumpSuppressRef = useRef(0)
 
   const activeDoc = useMemo(() => docs.find((d) => d.id === activeId) || null, [docs, activeId])
+
+  useEffect(() => {
+    if (!activeDoc) return
+    const nextPaper = activeDoc.kind === 'word' ? (activeDoc.paper === 'b5' ? 'b5' : 'a4') : 'wide'
+    if (paper !== nextPaper) setPaper(nextPaper)
+  }, [activeDoc?.id, activeDoc?.kind, activeDoc?.paper])
 
   // 初次加载修正 activeId
   useEffect(() => {
@@ -332,14 +337,12 @@ export default function App() {
   }, [zoom, paper])
 
   const changePaper = (nextPaper) => {
-    if (nextPaper === paper) return
+    if (!activeDoc || activeDoc.kind !== 'word' || !['a4', 'b5'].includes(nextPaper) || nextPaper === paper) return
     setPaper(nextPaper)
+    persist(docs.map((doc) => (doc.id === activeDoc.id ? { ...doc, paper: nextPaper, updatedAt: Date.now() } : doc)))
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const canvas = mainRef.current?.querySelector('.canvas')
-      if (canvas) {
-        canvas.scrollTop = 0
-        canvas.scrollLeft = 0
-      }
+      if (canvas) { canvas.scrollTop = 0; canvas.scrollLeft = 0 }
       window.dispatchEvent(new Event('tdocs:layout'))
     }))
   }
@@ -411,11 +414,14 @@ export default function App() {
   }, [])
 
   // ---------- 操作 ----------
-  const handleCreate = (group = '') => {
-    const doc = createDoc()
+  const handleCreate = (kind = 'document', group = '') => {
+    const doc = createDoc('无标题文档', '', { kind, paper: 'a4' })
     doc.group = group || activeDoc?.group || ''
     persist([doc, ...docs])
     setActiveId(doc.id)
+    setPaper(kind === 'word' ? 'a4' : 'wide')
+    setEditor(null)
+    setHeadings([])
   }
 
   const handleSelect = (id) => {
@@ -427,6 +433,8 @@ export default function App() {
       setTreeOpen((v) => !v)
       return
     }
+    const target = docs.find((doc) => doc.id === id)
+    setPaper(target?.kind === 'word' ? (target.paper === 'b5' ? 'b5' : 'a4') : 'wide')
     setActiveId(id)
     setEditor(null)
     setHeadings([])
@@ -560,7 +568,7 @@ export default function App() {
       if (/\.(md|markdown)$/i.test(f.name)) content = renderMarkdown(f.content)
       else if (/\.(html?)$/i.test(f.name)) content = f.content
       else content = String(f.content).split(/\r?\n/).map((l) => `<p>${esc(l)}</p>`).join('')
-      return { ...createDoc(title), content, group: activeDoc?.group || '' }
+      return { ...createDoc(title, content, { kind: activeDoc?.kind || 'document', paper: activeDoc?.paper || 'a4' }), group: activeDoc?.group || '' }
     })
     persist([...newDocs, ...docs])
     setActiveId(newDocs[0].id)
@@ -680,18 +688,17 @@ export default function App() {
   const closeAllMenus = () => {
     setShowExportMenu(false)
     setShowPageMenu(false)
-    setShowSettings(false)
     setZoomMenuOpen(false)
     setRulerOpen(false)
   }
 
   // 点击外部关闭所有浮层菜单（互斥 + 全局关闭统一）
   useEffect(() => {
-    if (!showExportMenu && !showPageMenu && !showSettings && !zoomMenuOpen && !rulerOpen) return
+    if (!showExportMenu && !showPageMenu && !zoomMenuOpen && !rulerOpen) return
     const close = () => closeAllMenus()
     setTimeout(() => window.addEventListener('click', close), 0)
     return () => window.removeEventListener('click', close)
-  }, [showExportMenu, showPageMenu, showSettings, zoomMenuOpen, rulerOpen])
+  }, [showExportMenu, showPageMenu, zoomMenuOpen, rulerOpen])
 
   // 窗口过窄时自动收起侧边栏大纲树，避免页面被挤压遮挡
   useEffect(() => {
@@ -787,121 +794,31 @@ export default function App() {
           <button
             className={`icon-btn${showVersionHistory ? ' active' : ''}`}
             data-tip="版本历史"
-            onClick={() => { setShowOutline(false); setAiConfigOpen(false); setShowVersionHistory((value) => !value) }}
+            onClick={() => { setShowOutline(false); setShowVersionHistory((value) => !value) }}
           >
             <Icon name="undo" />
           </button>
 
-          {/* 页面：宽屏 / A4 / B5（自定义菜单，与其余下拉风格统一） */}
-          <div className="menu-wrap">
-            <button
-              className="tb-block-btn tb-page-btn"
-              title="文档模式 / 页面模式"
-              onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageMenu(!showPageMenu) }}
-            >
-              {PAPER[paper][0]}
-              <Icon name="chevronDown" size={13} />
-            </button>
-            {showPageMenu && (
-              <div className="menu page-menu" onClick={(e) => e.stopPropagation()}>
-                <div className="settings-label">工作模式</div>
-                <button
-                  className={`menu-item${paper === 'wide' ? ' active' : ''}`}
-                  onClick={() => { changePaper('wide'); setShowPageMenu(false) }}
-                >
-                  <span>文档模式（无限画布）</span>
-                  {paper === 'wide' && <span className="menu-item-check">✓</span>}
-                </button>
-                <div className="menu-sep" />
-                <div className="settings-label">页面模式</div>
-                <button
-                  className={`menu-item${paper === 'a4' ? ' active' : ''}`}
-                  onClick={() => { changePaper('a4'); setShowPageMenu(false) }}
-                >
-                  <span>A4</span>
-                  {paper === 'a4' && <span className="menu-item-check">✓</span>}
-                </button>
-                <button
-                  className={`menu-item${paper === 'b5' ? ' active' : ''}`}
-                  onClick={() => { changePaper('b5'); setShowPageMenu(false) }}
-                >
-                  <span>B5</span>
-                  {paper === 'b5' && <span className="menu-item-check">✓</span>}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 设置（⚙️）：主题 + 分页相关设置集中于此 */}
-          <div className="menu-wrap">
-            <button
-              className="icon-btn"
-              data-tip="设置"
-              onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(!showSettings) }}
-            >
-              <Icon name="settings" />
-            </button>
-            {showSettings && (
-              <div className="menu settings-menu" onClick={(e) => e.stopPropagation()}>
-                <div className="settings-label">明暗模式</div>
-                <div className="settings-seg">
-                  <button className={themePref === 'light' ? 'active' : ''} onClick={() => setThemePref('light')}>浅色</button>
-                  <button className={themePref === 'dark' ? 'active' : ''} onClick={() => setThemePref('dark')}>深色</button>
-                  <button className={themePref === 'system' ? 'active' : ''} title="跟随系统自动切换明暗" onClick={() => setThemePref('system')}>跟随系统</button>
+          {activeDoc?.kind === 'word' ? (
+            <div className="menu-wrap">
+              <button className="tb-block-btn tb-page-btn workspace-word-btn" title="Word 纸张大小" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageMenu(!showPageMenu) }}>
+                Word · {PAPER[paper][0]}
+                <Icon name="chevronDown" size={13} />
+              </button>
+              {showPageMenu && (
+                <div className="menu page-menu" onClick={(e) => e.stopPropagation()}>
+                  <div className="settings-label">纸张大小</div>
+                  <button className={`menu-item${paper === 'a4' ? ' active' : ''}`} onClick={() => { changePaper('a4'); setShowPageMenu(false) }}><span>A4</span>{paper === 'a4' && <span className="menu-item-check">✓</span>}</button>
+                  <button className={`menu-item${paper === 'b5' ? ' active' : ''}`} onClick={() => { changePaper('b5'); setShowPageMenu(false) }}><span>B5</span>{paper === 'b5' && <span className="menu-item-check">✓</span>}</button>
                 </div>
-                <div className="settings-label">主题颜色</div>
-                {THEME_GROUPS.map(([gname, keys]) => (
-                  <div key={gname} className="theme-group">
-                    <span className="theme-group-label">{gname}</span>
-                    <div className="theme-row">
-                      {keys.map((k) => {
-                        const t = THEMES[k]
-                        const cur = theme === 'dark' ? darkKey : lightKey
-                        return (
-                          <button
-                            key={k}
-                            className={`theme-dot${cur === k ? ' active' : ''}`}
-                            style={{ background: t.colors['surface-2'], borderColor: t.accent }}
-                            data-tip={t.name}
-                            onClick={() => {
-                              // 点击色卡立即切换：浅色系 → 浅色主题，深色系 → 深色主题
-                              if (t.mode === 'dark') { setDarkKey(k); setThemePref('dark') }
-                              else { setLightKey(k); setThemePref('light') }
-                            }}
-                          >
-                            <span className="theme-dot-accent" style={{ background: t.accent }} />
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-                {paper !== 'wide' && <div className="menu-sep" />}
-                {paper !== 'wide' && (
-                  <>
-                    <div className="settings-label">分页样式</div>
-                    <div className="settings-seg">
-                      <button className={breakStyle === 'dashed' ? 'active' : ''} title="页与页之间用虚线标记" onClick={() => setBreakStyle('dashed')}>虚线</button>
-                      <button className={breakStyle === 'split' ? 'active' : ''} title="每页独立成块，页间灰带分开" onClick={() => setBreakStyle('split')}>分离</button>
-                    </div>
-                    <div className="settings-label">页码标签</div>
-                    <div className="settings-seg">
-                      <button className={pageLabelStyle === 'total' ? 'active' : ''} title="第 1 页 / 共 54 页" onClick={() => setPageLabelStyle('total')}>总数</button>
-                      <button className={pageLabelStyle === 'pair' ? 'active' : ''} title="第 1 页 / 第 2 页" onClick={() => setPageLabelStyle('pair')}>相邻</button>
-                    </div>
-                  </>
-                )}
-                <div className="menu-sep" />
-                <button
-                  className="menu-item"
-                  onClick={() => { setShowSettings(false); setShowOutline(false); setShowVersionHistory(false); setAiConfigOpen(true) }}
-                >
-                  <Icon name="sparkle" size={15} />
-                  <span>AI 配置</span>
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : <span className="workspace-mode-badge"><Icon name="doc" size={13} />文档</span>}
+
+          {/* 设置统一使用中央分类窗口。 */}
+          <button className={`icon-btn${showSettings ? ' active' : ''}`} data-tip="设置" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(true) }}>
+            <Icon name="settings" />
+          </button>
 
           {/* 页边距（左右宽距）——已迁移到正文上方标尺，点击标尺弹出阈值切换 */}
 
@@ -968,6 +885,7 @@ export default function App() {
 
         <main
           className="main"
+          data-workspace={activeDoc?.kind || 'document'}
           ref={mainRef}
           style={{
             '--doc-zoom': paper === 'wide' ? zoom : 1,
@@ -984,6 +902,8 @@ export default function App() {
               {showFindReplace && (
                 <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
               )}
+              {activeDoc.kind === 'word' && (
+              <>
               {/* 边距标尺（Word/WPS 式）：宽度与页面文字区对齐，可拖动灰白交界调边距，点击弹预设档位 */}
               <div
                 className="ruler"
@@ -1032,6 +952,8 @@ export default function App() {
                   </div>
                 )}
               </div>
+              </>
+              )}
               {/* key 保证切换文档时编辑器重新初始化 */}
               <Editor
                 key={activeDoc.id}
@@ -1041,14 +963,14 @@ export default function App() {
                 onHeadings={setHeadings}
                 onReady={setEditor}
                 onAi={openAi}
-                paged={paper !== 'wide'}
+                paged={activeDoc.kind === 'word'}
                 pageH={pageSize.h}
                 breakStyle={breakStyle}
                 pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
                 onSelectionRange={(range) => { lastSelectionRef.current = range }}
                 aiSelection={aiPrompt?.selection || null}
-                layoutKey={`${paper}:${pageSize.w}:${pageSize.h}:${pagePad}`}
+                layoutKey={`${activeDoc.kind}:${paper}:${pageSize.w}:${pageSize.h}:${pagePad}`}
                 visualScale={zoom}
                 aiInline={aiInline}
                 onResolveInline={() => setAiInline(null)}
@@ -1090,7 +1012,7 @@ export default function App() {
                   </div>
                   <button
                     className={`statusbar-link${showOutline ? ' active' : ''}`}
-                    onClick={() => { setShowVersionHistory(false); setAiConfigOpen(false); setShowOutline(!showOutline) }}
+                    onClick={() => { setShowVersionHistory(false); setShowOutline(!showOutline) }}
                   >
                     大纲 {headings.length ? `(${headings.length})` : ''}
                   </button>
@@ -1102,7 +1024,7 @@ export default function App() {
             <div className="welcome">
               <div className="big-icon"><Icon name="doc" size={64} /></div>
               <h2>还没有文档</h2>
-              <button className="btn btn-primary" onClick={handleCreate}>
+              <button className="btn btn-primary" onClick={() => handleCreate('document')}>
                 <Icon name="plus" size={15} />创建第一篇文档
               </button>
             </div>
@@ -1113,10 +1035,6 @@ export default function App() {
               onRestore={handleRestoreVersion}
               onClose={() => setShowVersionHistory(false)}
             />
-          )}
-          {/* AI 配置面板（只做配置与连接测试） */}
-          {aiConfigOpen && (
-            <AiPanel onClose={() => setAiConfigOpen(false)} />
           )}
           {/* AI 改写浮动输入框（选中处上方/顶栏下方，不遮挡选中文字） */}
           {aiPrompt && (
@@ -1141,6 +1059,28 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {showSettings && (
+        <SettingsDialog
+          onClose={() => setShowSettings(false)}
+          themePref={themePref}
+          setThemePref={setThemePref}
+          themes={THEMES}
+          themeGroups={THEME_GROUPS}
+          theme={theme}
+          lightKey={lightKey}
+          darkKey={darkKey}
+          setLightKey={setLightKey}
+          setDarkKey={setDarkKey}
+          isWord={activeDoc?.kind === 'word'}
+          breakStyle={breakStyle}
+          setBreakStyle={setBreakStyle}
+          pageLabelStyle={pageLabelStyle}
+          setPageLabelStyle={setPageLabelStyle}
+          pagePad={pagePad}
+          setPagePad={setPagePad}
+        />
+      )}
 
       {/* 模态框 */}
       {modal?.type === 'delete' && (

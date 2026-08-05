@@ -1,9 +1,9 @@
-// 浮动改写输入框：上下文选项、模型切换、结果 diff 对照、可拖拽
+// 浮动改写输入框：模型菜单仅展示已配置厂商。
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DOMSerializer } from '@tiptap/pm/model'
 import { Icon } from './Icons.jsx'
-import { loadApiConfig, saveApiConfig, callLLM, cleanLLMOutput, sanitizeHtml } from '../lib/api.js'
-import { PROVIDERS, getProvider } from '../lib/aiProviders.js'
+import { loadApiConfig, listConfiguredApiConfigs, saveApiConfig, callLLM, cleanLLMOutput, sanitizeHtml } from '../lib/api.js'
+import { getProvider } from '../lib/aiProviders.js'
 
 function getSelectionHtml(editor, selection) {
   if (!selection || !editor) return ''
@@ -35,37 +35,32 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
   const [accepted, setAccepted] = useState(null)
   const [cfg, setCfg] = useState(loadApiConfig)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
-  const inputRef = useRef(null)
   const promptRef = useRef(null)
 
   const selectionHtml = useMemo(() => getSelectionHtml(editor, selection), [editor, selection])
   const fullHtml = useMemo(() => editor?.getHTML?.() || '', [editor])
+  const configured = useMemo(() => listConfiguredApiConfigs(), [modelMenuOpen, cfg.provider, cfg.model])
   const provider = getProvider(cfg.provider)
 
   useEffect(() => {
     if (!modelMenuOpen) return undefined
     const close = (event) => {
-      if (!promptRef.current?.contains(event.target)) setModelMenuOpen(false)
+      if (!event.target.closest?.('.ai-model-picker')) setModelMenuOpen(false)
     }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
+    document.addEventListener('mousedown', close, true)
+    return () => document.removeEventListener('mousedown', close, true)
   }, [modelMenuOpen])
 
-  const chooseModel = (nextProvider, model) => {
-    const next = {
-      ...cfg,
-      provider: nextProvider.id,
-      baseUrl: nextProvider.baseUrl || cfg.baseUrl,
-      model,
-    }
-    setCfg(next)
+  const chooseModel = (profile, model) => {
+    const next = { ...profile, model }
     saveApiConfig(next)
+    setCfg(next)
     setModelMenuOpen(false)
   }
 
   const run = async () => {
-    if (!cfg.apiKey.trim()) {
-      setError('尚未配置 API Key：请在右上角“设置 → AI 配置”中完成配置')
+    if (!cfg.apiKey?.trim()) {
+      setError('尚未配置可用模型：请在右上角“设置 → AI 模型”中完成配置')
       return
     }
     const instruction = text.trim()
@@ -98,7 +93,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
         const newHtml = sanitizeHtml(cleanLLMOutput(answer))
         const oldParts = splitParagraphs(fullHtml)
         const newParts = splitParagraphs(newHtml)
-        const parts = oldParts.map((old, i) => ({ old, new: newParts[i] || newParts[newParts.length - 1] || newHtml }))
+        const parts = oldParts.map((old, index) => ({ old, new: newParts[index] || newParts[newParts.length - 1] || newHtml }))
         setResult({ mode: 'full', oldHtml: fullHtml, newHtml, parts })
       }
     } catch (e) {
@@ -161,32 +156,30 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
         <div className="ai-prompt-head-actions">
           <div className="menu-wrap ai-model-picker">
             <button className="ai-model-btn" type="button" onClick={() => setModelMenuOpen((value) => !value)}>
-              <span>{provider.name} · {cfg.model || '未选择模型'}</span>
+              <span>{cfg.apiKey?.trim() ? `${provider.name} · ${cfg.model}` : '未配置模型'}</span>
               <Icon name="chevronDown" size={11} />
             </button>
             {modelMenuOpen && (
               <div className="menu ai-model-menu" onClick={(event) => event.stopPropagation()}>
-                {PROVIDERS.filter((item) => item.models.length).map((item) => (
-                  <div className="ai-model-group" key={item.id}>
-                    <div className="settings-label">{item.name}</div>
-                    {item.models.map((model) => (
-                      <button
-                        key={`${item.id}:${model}`}
-                        className={`menu-item${cfg.provider === item.id && cfg.model === model ? ' active' : ''}`}
-                        onClick={() => chooseModel(item, model)}
-                      >
-                        <span>{model}</span>
-                        {cfg.provider === item.id && cfg.model === model && <span className="menu-item-check">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                ))}
+                {configured.length ? configured.map((profile) => {
+                  const item = getProvider(profile.provider)
+                  const models = item.models?.length ? item.models : [profile.model]
+                  return (
+                    <div className="ai-model-group" key={profile.provider}>
+                      <div className="settings-label">{item.name}</div>
+                      {models.map((model) => (
+                        <button key={`${profile.provider}:${model}`} className={`menu-item${cfg.provider === profile.provider && cfg.model === model ? ' active' : ''}`} onClick={() => chooseModel(profile, model)}>
+                          <span>{model}</span>
+                          {cfg.provider === profile.provider && cfg.model === model && <span className="menu-item-check">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                }) : <div className="ai-model-empty">尚未配置厂商，请前往设置。</div>}
               </div>
             )}
           </div>
-          <button className="icon-btn" data-tip="关闭" onClick={onClose}>
-            <Icon name="x" size={13} />
-          </button>
+          <button className="icon-btn" data-tip="关闭" onClick={onClose}><Icon name="x" size={13} /></button>
         </div>
       </div>
 
@@ -199,12 +192,9 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
               ['扩写', '在不虚构事实的前提下扩写，补足必要细节和衔接。'],
               ['正式', '改成清晰、克制、专业的正式书面表达。'],
               ['口语', '改成自然、顺畅、像真人交流的口语表达。'],
-            ].map(([label, prompt]) => (
-              <button key={label} className="ai-quick-action" type="button" onClick={() => setText(prompt)}>{label}</button>
-            ))}
+            ].map(([label, prompt]) => <button key={label} className="ai-quick-action" type="button" onClick={() => setText(prompt)}>{label}</button>)}
           </div>
           <textarea
-            ref={inputRef}
             className={`ai-prompt-input${text.trim() ? ' filled' : ''}`}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -216,12 +206,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
               if (e.key === 'Escape') onClose()
             }}
           />
-          {selection && (
-            <label className="ai-prompt-ctx">
-              <input type="checkbox" checked={withContext} onChange={(e) => setWithContext(e.target.checked)} />
-              联系上下文改写
-            </label>
-          )}
+          {selection && <label className="ai-prompt-ctx"><input type="checkbox" checked={withContext} onChange={(e) => setWithContext(e.target.checked)} />联系上下文改写</label>}
           {withContext && selection && <div className="ai-prompt-warn">⚠ 将上传整篇文档作为上下文，消耗大量 Token</div>}
           {error && <div className="ai-error ai-prompt-error">{error}</div>}
           <div className="ai-prompt-actions">
@@ -239,9 +224,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
                 <div className="ai-diff-old">{textOf(part.old) || '（空段）'}</div>
                 <div className="ai-diff-arrow"><Icon name="chevronDown" size={12} /></div>
                 <div className="ai-diff-new" dangerouslySetInnerHTML={{ __html: part.new }} />
-                <button className="ai-diff-accept" disabled={accepted === 'all' || (accepted && accepted.has(index))} onClick={() => apply('part', index)}>
-                  {accepted && accepted.has(index) ? '✓ 已接受' : '接受此段'}
-                </button>
+                <button className="ai-diff-accept" disabled={accepted === 'all' || (accepted && accepted.has(index))} onClick={() => apply('part', index)}>{accepted && accepted.has(index) ? '✓ 已接受' : '接受此段'}</button>
               </div>
             ))}
           </div>

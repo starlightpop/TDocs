@@ -11,6 +11,7 @@ export default function Sidebar({
   onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles,
 }) {
   const [query, setQuery] = useState('')
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [collapsedGroups, setCollapsedGroups] = useState(() => new Set())
   const [editName, setEditName] = useState('')
@@ -21,6 +22,13 @@ export default function Sidebar({
   // 文件内联重命名
   const [editingDocId, setEditingDocId] = useState(null)
   const [docEditName, setDocEditName] = useState('')
+
+  useEffect(() => {
+    if (!createMenuOpen) return undefined
+    const close = (event) => { if (!event.target.closest?.('.new-doc-split')) setCreateMenuOpen(false) }
+    document.addEventListener('mousedown', close, true)
+    return () => document.removeEventListener('mousedown', close, true)
+  }, [createMenuOpen])
 
   // 进入内联编辑时初始化名称（新建或重命名文件夹）
   useEffect(() => {
@@ -121,6 +129,7 @@ export default function Sidebar({
           <div className="doc-item-title">{doc.title || '无标题文档'}</div>
         )}
         <div className="doc-item-meta">
+          <span className={`doc-kind-badge ${doc.kind === 'word' ? 'word' : 'document'}`}>{doc.kind === 'word' ? `Word · ${(doc.paper || 'a4').toUpperCase()}` : '文档'}</span>
           {formatTime(doc.updatedAt)}
         </div>
         <div className="doc-item-actions" onClick={(e) => e.stopPropagation()}>
@@ -263,9 +272,20 @@ export default function Sidebar({
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
-        <button className="btn btn-primary new-doc-btn" onClick={() => onCreate()}>
-          <Icon name="plus" size={15} />新建文档
-        </button>
+        <div className="new-doc-split">
+          <button className="btn btn-primary new-doc-btn" onClick={() => { onCreate('document'); setCreateMenuOpen(false) }}>
+            <Icon name="plus" size={15} />新建文档
+          </button>
+          <button className="btn btn-primary new-doc-arrow" aria-label="选择文件类型" onClick={() => setCreateMenuOpen((value) => !value)}>
+            <Icon name="chevronDown" size={12} />
+          </button>
+          {createMenuOpen && (
+            <div className="menu new-doc-menu">
+              <button className="menu-item" onClick={() => { onCreate('document'); setCreateMenuOpen(false) }}><Icon name="doc" size={15} /><span><strong>文档</strong><small>连续画布</small></span></button>
+              <button className="menu-item" onClick={() => { onCreate('word'); setCreateMenuOpen(false) }}><Icon name="page" size={15} /><span><strong>Word</strong><small>A4 / B5 固定纸张</small></span></button>
+            </div>
+          )}
+        </div>
         <div className="sidebar-search-row">
           <div className="search-box">
             <span className="search-icon"><Icon name="search" size={15} /></span>

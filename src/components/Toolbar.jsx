@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icons.jsx'
-import { getCodeLanguageLabel } from '../lib/codeLanguage.js'
 
 const TEXT_COLORS = [
   '#1c1e21', '#6b7280', '#9aa2b1', '#e5484d', '#f2814a', '#e0a428',
@@ -68,7 +67,6 @@ export default function Toolbar({ editor, onAi }) {
   const [showBlockMenu, setShowBlockMenu] = useState(false)
   const [showFontSize, setShowFontSize] = useState(false)
   const [showFontFamily, setShowFontFamily] = useState(false)
-  const [runOutput, setRunOutput] = useState(null) // 本地运行状态与标准输出
   const [hoverCell, setHoverCell] = useState({ r: 0, c: 0 })
   const fileRef = useRef(null)
   const [, setRevision] = useState(0)
@@ -116,41 +114,6 @@ export default function Toolbar({ editor, onAi }) {
     const url = window.prompt('输入链接地址', 'https://')
     if (url && url !== 'https://') {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-    }
-  }
-
-  const getActiveCodeBlock = () => {
-    const { $from } = editor.state.selection
-    for (let depth = $from.depth; depth > 0; depth -= 1) {
-      const node = $from.node(depth)
-      if (node.type.name === 'codeBlock') return { node, pos: $from.before(depth) }
-    }
-    return null
-  }
-
-  // 代码在 Electron 主进程的独立子进程中运行，标准输出和错误输出原样返回。
-  const runCode = async () => {
-    const active = getActiveCodeBlock()
-    if (!active) return
-    const selectedLanguage = editor.getAttributes('codeBlock').language || 'plaintext'
-    const dom = editor.view.nodeDOM(active.pos)
-    const rect = dom?.getBoundingClientRect?.()
-    const width = 480
-    const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect?.left || 180))
-    const preferredTop = (rect?.bottom || 110) + 10
-    const top = preferredTop + 230 < window.innerHeight
-      ? preferredTop
-      : Math.max(12, (rect?.top || 250) - 240)
-    setRunOutput({ running: true, ok: true, stdout: '', stderr: '', language: selectedLanguage, top, left })
-    if (!window.tdocs?.runCode) {
-      setRunOutput({ running: false, ok: false, stdout: '', stderr: '代码运行仅在 TDocs 桌面应用中可用。', language: selectedLanguage, top, left })
-      return
-    }
-    try {
-      const result = await window.tdocs.runCode({ language: selectedLanguage, code: active.node.textContent })
-      setRunOutput({ running: false, ...result, top, left })
-    } catch (error) {
-      setRunOutput({ running: false, ok: false, stdout: '', stderr: String(error?.message || error), language: selectedLanguage, top, left })
     }
   }
 
@@ -425,37 +388,6 @@ export default function Toolbar({ editor, onAi }) {
           <TB icon="plus" title="添加列" onClick={() => editor.chain().focus().addColumnAfter().run()} />
           <TB icon="trash" title="删除表格" onClick={() => editor.chain().focus().deleteTable().run()} />
         </>
-      )}
-      {/* 语言选择位于代码块右上角；工具栏只保留运行入口。 */}
-      {editor.isActive('codeBlock') && (
-        <button className="tb-sup-sub tb-run-btn" title="在本机运行当前代码块" disabled={runOutput?.running} onClick={runCode}>▶</button>
-      )}
-      {runOutput && (
-        <div className="code-terminal" style={{ top: runOutput.top, left: runOutput.left }}>
-          <div className="code-terminal-head">
-            <span className="code-terminal-icon"><Icon name="codeBlock" size={13} /></span>
-            <span className="code-terminal-title">
-              {runOutput.running ? '正在运行' : '运行结果'} · {getCodeLanguageLabel(runOutput.language)}
-            </span>
-            {!runOutput.running && (
-              <span className={`code-terminal-status${runOutput.ok ? ' ok' : ' fail'}`}>
-                {runOutput.ok ? '成功' : runOutput.timedOut ? '超时' : '失败'}
-              </span>
-            )}
-            <button className="icon-btn" title="关闭" onClick={() => setRunOutput(null)}><Icon name="x" size={12} /></button>
-          </div>
-          <div className="code-terminal-body">
-            {runOutput.running ? (
-              <pre className="term-running">正在启动本地运行环境…</pre>
-            ) : (
-              <>
-                {runOutput.stdout ? <pre className="term-out">{runOutput.stdout}</pre> : null}
-                {runOutput.stderr ? <pre className="term-out err">{runOutput.stderr}</pre> : null}
-                {!runOutput.stdout && !runOutput.stderr && runOutput.ok ? <pre className="term-empty">程序运行完成，没有输出。</pre> : null}
-              </>
-            )}
-          </div>
-        </div>
       )}
       <div className="divider" />
       <TB icon="eraser" title="清除格式" onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} />

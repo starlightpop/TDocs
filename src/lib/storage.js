@@ -9,12 +9,31 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+function legacyKindFor(doc) {
+  if (doc?.kind === 'word' || doc?.kind === 'document') return doc.kind
+  if (doc?.paper === 'a4' || doc?.paper === 'b5') return 'word'
+  const oldPaper = localStorage.getItem('inkdocs.paper')
+  return oldPaper === 'a4' || oldPaper === 'b5' ? 'word' : 'document'
+}
+
+export function normalizeDoc(doc) {
+  const kind = legacyKindFor(doc)
+  const normalized = { ...doc, kind }
+  if (kind === 'word') {
+    const oldPaper = localStorage.getItem('inkdocs.paper')
+    normalized.paper = doc?.paper === 'b5' || (!doc?.paper && oldPaper === 'b5') ? 'b5' : 'a4'
+  } else {
+    delete normalized.paper
+  }
+  return normalized
+}
+
 export function loadDocs() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const docs = JSON.parse(raw)
-    return Array.isArray(docs) ? docs : []
+    return Array.isArray(docs) ? docs.map(normalizeDoc) : []
   } catch {
     return []
   }
@@ -22,7 +41,7 @@ export function loadDocs() {
 
 export function saveDocs(docs) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs.map(normalizeDoc)))
     return true
   } catch (e) {
     console.error('保存失败', e)
@@ -38,17 +57,21 @@ export function saveActiveId(id) {
   localStorage.setItem(ACTIVE_KEY, id || '')
 }
 
-export function createDoc(title = '无标题文档', content = '') {
+export function createDoc(title = '无标题文档', content = '', options = {}) {
   const now = Date.now()
-  return {
+  const kind = options.kind === 'word' ? 'word' : 'document'
+  const doc = {
     id: uid(),
     title,
     content,
     createdAt: now,
     updatedAt: now,
-    autoTitle: true, // 标题自动跟随正文首行，手动改标题后置为 false
-    group: '', // 所属分组 id，空为未分组
+    autoTitle: true,
+    group: '',
+    kind,
   }
+  if (kind === 'word') doc.paper = options.paper === 'b5' ? 'b5' : 'a4'
+  return doc
 }
 
 // ---------- 分组 ----------
@@ -71,7 +94,6 @@ export function createGroup(name) {
 }
 
 // ---------- 主题 ----------
-// themePref: 'system' | 'light' | 'dark'，默认跟随系统
 export function loadTheme() {
   const saved = localStorage.getItem(THEME_KEY)
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved
@@ -97,12 +119,10 @@ export function formatTime(ts) {
 }
 
 export function stripHtml(html) {
-  // 使用 DOMParser 解析（不会执行脚本），仅提取纯文本
   const doc = new DOMParser().parseFromString(html || '', 'text/html')
   return (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
 }
 
-/** 提取正文第一个非空块级元素的文本，用作自动标题 */
 export function firstLineTitle(html) {
   if (!html) return ''
   const doc = new DOMParser().parseFromString(html, 'text/html')

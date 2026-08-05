@@ -2893,3 +2893,157 @@ html.platform-mac .topbar .menu {
   .find-replace-dock .replace-row { flex-wrap: wrap; }
   .ai-model-btn { max-width: 150px; }
 }
+
+
+/* ============================================================
+   UX round 3: immutable workspaces and stable code tooling
+   ============================================================ */
+
+/* Compact floating find box; it no longer consumes an application row. */
+.find-replace.find-replace-dock {
+  position: fixed !important;
+  top: calc(var(--topbar-h) + var(--toolbar-h) + 8px) !important;
+  right: 18px !important;
+  left: auto !important;
+  z-index: 1500;
+  width: min(500px, calc(100vw - 36px)) !important;
+  max-width: 500px !important;
+  padding: 8px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-panel) !important;
+  background: color-mix(in srgb, var(--surface) 98%, transparent) !important;
+  box-shadow: var(--floating-shadow) !important;
+  backdrop-filter: blur(16px) saturate(1.1) !important;
+}
+.find-replace-dock .find-row,
+.find-replace-dock .replace-row { max-width: none !important; margin: 0 !important; }
+.find-replace-dock .find-option { width: auto !important; margin: 6px 0 0 24px !important; padding: 0 !important; }
+
+/* File type is explicit and immutable. */
+.workspace-mode-badge,
+.workspace-word-btn { white-space: nowrap; }
+.workspace-mode-badge {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.new-doc-split { position: relative; display: flex; width: 100%; }
+.new-doc-split .new-doc-btn { flex: 1; border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.new-doc-arrow { width: 34px; padding: 0 !important; border-left-color: color-mix(in srgb, var(--accent-text) 25%, transparent) !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
+.new-doc-menu { top: calc(100% + 5px); left: 0; right: 0; z-index: 600; }
+.new-doc-menu .menu-item { align-items: flex-start; }
+.new-doc-menu .menu-item > span { display: grid; gap: 2px; text-align: left; }
+.new-doc-menu small { color: var(--text-3); font-size: 10.5px; font-weight: 400; }
+.doc-item-meta { display: flex; align-items: center; gap: 6px; }
+.doc-kind-badge { padding: 1px 5px; border-radius: 5px; background: var(--surface-3); color: var(--text-3); font-size: 9.5px; line-height: 16px; }
+.doc-kind-badge.word { color: var(--accent); background: var(--accent-soft); }
+
+/* Code block header owns language and run controls. */
+.code-block-head-actions { display: inline-flex; align-items: center; gap: 5px; }
+.code-run-btn {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+}
+.code-run-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.code-gutter > span { display: block; height: calc(1em * var(--code-line-height)); line-height: var(--code-line-height); border-radius: 3px; }
+.code-gutter > span.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); font-weight: 700; }
+
+/* Body portal keeps the result window independent from editor/page transforms. */
+.code-terminal-portal { width: 480px; max-width: calc(100vw - 16px); }
+.code-terminal-drag-handle { cursor: move; user-select: none; }
+.code-terminal-body { min-height: 82px; box-sizing: border-box; }
+.code-terminal-body pre { min-height: 22px; }
+
+/* Central categorized settings window. */
+.settings-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 12, 16, .34);
+  backdrop-filter: blur(5px);
+}
+.settings-dialog {
+  width: min(820px, calc(100vw - 32px));
+  height: min(610px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(0,0,0,.28);
+}
+.settings-dialog-head {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-dialog-head > div { display: grid; gap: 2px; }
+.settings-dialog-head strong { font-size: 16px; }
+.settings-dialog-head span { color: var(--text-3); font-size: 11px; }
+.settings-dialog-body { min-height: 0; flex: 1; display: grid; grid-template-columns: 170px minmax(0, 1fr); }
+.settings-nav { padding: 12px 8px; border-right: 1px solid var(--border); background: var(--surface-2); }
+.settings-nav button { width: 100%; min-height: 38px; display: flex; align-items: center; gap: 9px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer; }
+.settings-nav button:hover { background: var(--surface-3); }
+.settings-nav button.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.settings-content { min-width: 0; overflow: auto; padding: 24px 28px 32px; }
+.settings-page { display: grid; gap: 20px; }
+.settings-page h2 { margin: 0; font-size: 20px; }
+.settings-field-group { display: grid; gap: 9px; }
+.settings-field-group > label { color: var(--text-2); font-size: 12px; font-weight: 600; }
+.settings-seg-wide { width: fit-content; min-width: 280px; }
+.settings-theme-grid { display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 10px; }
+.settings-theme-card { display: grid; gap: 7px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text-2); cursor: pointer; text-align: left; }
+.settings-theme-card.active { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.settings-theme-preview { height: 44px; display: flex; align-items: flex-end; padding: 6px; border: 1px solid; border-radius: 7px; }
+.settings-theme-preview i { width: 24px; height: 6px; border-radius: 999px; }
+.workspace-settings-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.workspace-settings-card p { margin: 5px 0 0; color: var(--text-2); font-size: 12.5px; line-height: 1.65; }
+.workspace-kind-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 10px; color: var(--text-2); background: var(--surface-3); }
+.workspace-kind-icon.word { color: var(--accent); background: var(--accent-soft); }
+.settings-note, .settings-empty-state { padding: 12px 14px; border-radius: 9px; background: var(--surface-2); color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.settings-range { width: min(420px, 100%); accent-color: var(--accent); }
+.settings-range-value { color: var(--text-3); font-size: 12px; }
+.settings-section-title { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.settings-section-title > div { display: grid; gap: 4px; }
+.settings-section-title span { color: var(--text-3); font-size: 11.5px; line-height: 1.5; }
+.provider-config-state { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--text-3) !important; white-space: nowrap; }
+.provider-config-state.ready { color: var(--success) !important; background: color-mix(in srgb, var(--success) 15%, transparent); }
+.ai-settings-pane { display: grid; gap: 16px; }
+.ai-cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ai-cfg-grid label { min-width: 0; }
+.ai-model-empty { padding: 20px 12px; color: var(--text-3); text-align: center; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .settings-dialog-mask { padding: 8px; }
+  .settings-dialog { width: 100%; height: calc(100vh - 16px); }
+  .settings-dialog-body { grid-template-columns: 58px minmax(0, 1fr); }
+  .settings-nav button { justify-content: center; padding: 0; }
+  .settings-nav span { display: none; }
+  .settings-content { padding: 18px 14px 24px; }
+  .settings-theme-grid { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
+  .ai-cfg-grid { grid-template-columns: 1fr; }
+  .find-replace.find-replace-dock { right: 8px !important; width: calc(100vw - 16px) !important; }
+}
