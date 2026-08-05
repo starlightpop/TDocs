@@ -27,6 +27,17 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Repair generated runner template escaping
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-word-pages-runtime.mjs')
+          text = path.read_text()
+          text = text.replace("`run('${escaped}')`", "\"run('\" + escaped + \"')\"")
+          text = text.replace("`当前版本没有配置 ${language} 的本地运行器。`", "'当前版本没有配置 ' + language + ' 的本地运行器。'")
+          text = text.replace("`本机没有安装 ${language} 运行环境，或运行程序不在 PATH 中。`", "'本机没有安装 ' + language + ' 运行环境，或运行程序不在 PATH 中。'")
+          path.write_text(text)
+          PY
       - name: Apply page geometry and runtime fixes
         run: node scripts/apply-word-pages-runtime.mjs
       - name: Check Electron syntax
