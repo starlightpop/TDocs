@@ -21,3 +21,12 @@ test('无法识别的纯文本不会伪装成 JavaScript 执行', async () => {
   assert.equal(result.ok, false)
   assert.match(result.stderr, /无法判断代码语言/)
 })
+
+
+test('print 调用通过 Python 返回直接标准输出', async () => {
+  const result = await runCode({ language: 'plaintext', code: 'print("p")' })
+  assert.equal(result.ok, true)
+  assert.equal(result.language, 'python')
+  assert.equal(result.stdout, 'p')
+  assert.equal(result.stderr, '')
+})
