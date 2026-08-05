@@ -28,6 +28,7 @@ import { extractHeadings } from '../lib/headings.js'
 import ContextMenu from './ContextMenu.jsx'
 import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
+import { SearchHighlightExtension } from '../extensions/SearchHighlight.js'
 
 // 将 HTML 内容转换并插入到编辑器指定位置
 function insertHtmlContent(view, html, pos) {
@@ -314,6 +315,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       AiOldMark,
       AiNewMark,
       AiSelPlugin,
+      SearchHighlightExtension,
     ],
     [],
   )

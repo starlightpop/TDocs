@@ -6,6 +6,8 @@ import Editor from './components/Editor.jsx'
 import Outline from './components/Outline.jsx'
 import AiPanel from './components/AiPanel.jsx'
 import AiPrompt from './components/AiPrompt.jsx'
+import FindReplace from './components/FindReplace.jsx'
+import VersionHistory from './components/VersionHistory.jsx'
 import { Icon } from './components/Icons.jsx'
 import {
   loadDocs, saveDocs, loadActiveId, saveActiveId, createDoc,
@@ -16,6 +18,7 @@ import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from '
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 import { renderMarkdown } from './lib/markdown.js'
 import { PAPER_PRESETS as PAPER, normalizePaper, resolvePageSize, viewModeForPaper } from './lib/viewModes.js'
+import { saveVersionSnapshot } from './lib/versionHistory.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs ✨</h1>
@@ -256,11 +259,14 @@ export default function App() {
   const [showPageMenu, setShowPageMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showOutline, setShowOutline] = useState(false)
+  const [showFindReplace, setShowFindReplace] = useState(false)
+  const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
   const [rulerOpen, setRulerOpen] = useState(false)
   const rulerRef = useRef(null)
   const rulerDownRef = useRef(null)
+  const versionCheckpointRef = useRef(new Map())
 
   // 拖动标尺灰白交界：连续调整页边距（24~160px）
   const startRulerDrag = (e) => {
@@ -320,6 +326,19 @@ export default function App() {
     localStorage.setItem('inkdocs.zoom', String(zoom))
   }, [zoom])
 
+  // 桌面文档的标准查找快捷键；拦截浏览器查找，定位到编辑器内文本。
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        setShowFindReplace(true)
+      }
+      if (event.key === 'Escape') setShowFindReplace(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   // ⌘/Ctrl + 滚轮调节字号
   useEffect(() => {
     const el = mainRef.current
@@ -353,6 +372,9 @@ export default function App() {
   }
 
   const handleSelect = (id) => {
+    if (id !== activeId && activeDoc) {
+      saveVersionSnapshot(activeDoc, { label: '切换前版本' })
+    }
     if (id === activeId) {
       // 再次点击当前文档：展开/收起标题树
       setTreeOpen((v) => !v)
@@ -367,9 +389,16 @@ export default function App() {
   const handleContentChange = useCallback(
     (html) => {
       setDocs((prev) => {
+        const now = Date.now()
         const next = prev.map((d) => {
           if (d.id !== activeId) return d
-          return { ...d, content: html, updatedAt: Date.now() }
+          const updated = { ...d, content: html, updatedAt: now }
+          const lastCheckpoint = versionCheckpointRef.current.get(d.id) || 0
+          if (now - lastCheckpoint >= 5 * 60 * 1000) {
+            saveVersionSnapshot(updated, { label: '自动版本' })
+            versionCheckpointRef.current.set(d.id, now)
+          }
+          return updated
         })
         saveDocs(next)
         return next
@@ -382,6 +411,21 @@ export default function App() {
 
   const handleTitleChange = (title) => {
     persist(docs.map((d) => (d.id === activeId ? { ...d, title, autoTitle: false, updatedAt: Date.now() } : d)))
+  }
+
+  const handleRestoreVersion = (version) => {
+    if (!activeDoc || !version) return
+    saveVersionSnapshot(activeDoc, { label: '恢复前版本', force: true })
+    const restored = {
+      ...activeDoc,
+      title: version.title || activeDoc.title,
+      content: version.content || '',
+      autoTitle: false,
+      updatedAt: Date.now(),
+    }
+    persist(docs.map((d) => (d.id === activeId ? restored : d)))
+    editor?.commands.setContent(restored.content, true)
+    setShowVersionHistory(false)
   }
 
   const handleDelete = (doc) => {
@@ -686,6 +730,20 @@ export default function App() {
             <span className="dot" />
             {saveState === 'saving' ? '保存中…' : '已保存'}
           </span>
+          <button
+            className={`icon-btn${showFindReplace ? ' active' : ''}`}
+            data-tip="查找和替换（⌘/Ctrl+F）"
+            onClick={() => setShowFindReplace((value) => !value)}
+          >
+            <Icon name="search" />
+          </button>
+          <button
+            className={`icon-btn${showVersionHistory ? ' active' : ''}`}
+            data-tip="版本历史"
+            onClick={() => setShowVersionHistory((value) => !value)}
+          >
+            <Icon name="undo" />
+          </button>
 
           {/* 页面：宽屏 / A4 / B5（自定义菜单，与其余下拉风格统一） */}
           <div className="menu-wrap">
@@ -984,6 +1042,16 @@ export default function App() {
                 <Icon name="plus" size={15} />创建第一篇文档
               </button>
             </div>
+          )}
+          {showFindReplace && (
+            <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
+          )}
+          {showVersionHistory && activeDoc && (
+            <VersionHistory
+              doc={activeDoc}
+              onRestore={handleRestoreVersion}
+              onClose={() => setShowVersionHistory(false)}
+            />
           )}
           {/* AI 配置面板（只做配置与连接测试） */}
           {aiConfigOpen && (
