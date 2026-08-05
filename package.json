@@ -12,7 +12,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "app": "npm run build && electron-builder --mac --arm64",
-    "app:dir": "npm run build && electron-builder --mac --arm64 --dir"
+    "app:dir": "npm run build && electron-builder --mac --arm64 --dir",
+    "test": "node --test tests/*.test.mjs",
+    "test:ci": "npm run test && npm run build"
   },
   "build": {
     "appId": "com.tdocs.app",

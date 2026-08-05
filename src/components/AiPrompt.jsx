@@ -66,7 +66,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
         ])
         const newHtml = sanitizeHtml(cleanLLMOutput(answer))
         // 内联 diff：直接在文档中呈现（原文划线 + 新内容高亮），由接受卡片确认
-        onInlineDiff?.({ oldHtml: selectionHtml, newHtml })
+        onInlineDiff?.({ oldHtml: selectionHtml, newHtml, range: { ...selection } })
         onClose()
       } else {
         // 全文模式
@@ -155,6 +155,19 @@ export default function AiPrompt({ editor, selection, pos, onClose, onOpenConfig
 
       {!result ? (
         <>
+          <div className="ai-quick-actions" aria-label="常用 AI 指令">
+            {[
+              ['润色', '润色这段文字，保持原意和事实不变，使表达更自然。'],
+              ['精简', '压缩这段文字，删除重复和空泛表达，保留关键信息。'],
+              ['扩写', '在不虚构事实的前提下扩写，补足必要细节和衔接。'],
+              ['正式', '改成清晰、克制、专业的正式书面表达。'],
+              ['口语', '改成自然、顺畅、像真人交流的口语表达。'],
+            ].map(([label, prompt]) => (
+              <button key={label} className="ai-quick-action" type="button" onClick={() => setText(prompt)}>
+                {label}
+              </button>
+            ))}
+          </div>
           <textarea
             ref={inputRef}
             className={`ai-prompt-input${text.trim() ? ' filled' : ''}`}

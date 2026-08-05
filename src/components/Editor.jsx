@@ -138,8 +138,17 @@ const Page = Node.create({
       const pageEl = document.createElement('div')
       pageEl.dataset.page = 'true'
       wrap.append(pageEl)
-      // update 返回 true：复用 DOM，避免每次 transaction 重建
-      return { dom: wrap, contentDOM: pageEl, update: () => true }
+      let currentNode = null
+      return {
+        dom: wrap,
+        contentDOM: pageEl,
+        update: (nextNode) => {
+          if (nextNode.type.name !== 'page') return false
+          currentNode = nextNode
+          return true
+        },
+        destroy: () => { currentNode = null },
+      }
     }
   },
 })
@@ -270,6 +279,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const [bubblePos, setBubblePos] = useState(null)
   const canvasRef = useRef(null)
   const lastPairsRef = useRef('')
+  const reflowRafRef = useRef(0)
+  const reflowRunRef = useRef(0)
 
   const extensions = useMemo(
     () => [
@@ -493,16 +504,30 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     return true
   }
 
+  // 每一帧只执行一次分页事务，等待 DOM 完成布局后再测量下一页。
+  // 旧实现使用同步 while 连续 dispatch，后续测量读取的是旧 DOM，容易产生空页、卡顿和错误分页。
+  const runReflow = () => {
+    cancelAnimationFrame(reflowRafRef.current)
+    const runId = ++reflowRunRef.current
+    let steps = 0
+    const step = () => {
+      if (runId !== reflowRunRef.current || !editor || !paged) return
+      const changed = reflow()
+      steps += 1
+      if (changed && steps < 120) {
+        reflowRafRef.current = requestAnimationFrame(step)
+      }
+    }
+    reflowRafRef.current = requestAnimationFrame(step)
+  }
+
   // paged 切换：结构转换 + 重排
   useEffect(() => {
     if (!editor) return
     if (paged) {
       toPaged()
-      // 内容变化后按页高重排（rAF 等 DOM 渲染）
-      requestAnimationFrame(() => {
-        let guard = 0
-        while (reflow() && guard++ < 60) { /* 迭代到稳定 */ }
-      })
+      // 等待页面 DOM 布局后逐帧重排
+      runReflow()
     } else {
       toWide()
     }
@@ -512,20 +537,14 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   // 编辑时实时重排（输入导致溢出自动分页）
   useEffect(() => {
     if (!editor || !paged) return
-    let raf = 0
-    const schedule = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        let guard = 0
-        while (reflow() && guard++ < 60) { /* 迭代 */ }
-      })
-    }
+    const schedule = () => runReflow()
     editor.on('transaction', schedule)
     editor.on('update', schedule)
     return () => {
       editor.off('transaction', schedule)
       editor.off('update', schedule)
-      cancelAnimationFrame(raf)
+      reflowRunRef.current += 1
+      cancelAnimationFrame(reflowRafRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, paged, pageH])

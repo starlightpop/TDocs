@@ -15,6 +15,7 @@ import {
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 import { renderMarkdown } from './lib/markdown.js'
+import { PAPER_PRESETS as PAPER, normalizePaper, resolvePageSize, viewModeForPaper } from './lib/viewModes.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs ✨</h1>
@@ -176,38 +177,33 @@ export default function App() {
     localStorage.setItem('inkdocs.accent', activeTheme.accent)
   }, [activeTheme])
 
-  // ---------- 纸张尺寸（宽屏不分页；A4/B5 按 Word 式分页显示） ----------
-  const PAPER = {
-    wide: ['宽屏', 880, 0],
-    a4: ['A4', 794, 1123],
-    b5: ['B5', 665, 937],
-  }
-  const [paper, setPaper] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.paper')
-    return PAPER[saved] ? saved : 'wide'
-  })
+  // ---------- 工作模式：文档（无限画布）/ 页面（Word/WPS 式纸张） ----------
+  const [paper, setPaper] = useState(() => normalizePaper(localStorage.getItem('inkdocs.paper')))
+  const viewMode = viewModeForPaper(paper)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-view-mode', viewMode)
+  }, [viewMode])
   // 分页模式页面尺寸：WPS 式“适应宽度”——按视口可用宽度放大，保持 A4/B5 比例，四周只留小边距
   const [pageSize, setPageSize] = useState(() => {
-    const base = PAPER[paper]
-    if (paper === 'wide') return { w: base[1], h: 0 }
-    const avail = (window.innerWidth - 312) || 968  // 减去侧边栏与左右边距，初始估算
-    const w = Math.max(600, Math.min(1200, avail))
-    return { w, h: Math.round((w * base[2]) / base[1]) }
+    const available = (window.innerWidth - 312) || 968
+    return resolvePageSize(paper, available)
   })
   useEffect(() => {
-    const base = PAPER[paper]
     const calc = () => {
-      if (paper === 'wide') { setPageSize({ w: base[1], h: 0 }); return }
-      const avail = (mainRef.current?.clientWidth || 1040) - 72
-      const w = Math.max(600, Math.min(1200, avail))
-      setPageSize({ w, h: Math.round((w * base[2]) / base[1]) })
+      const available = (mainRef.current?.clientWidth || 1040) - 48
+      setPageSize(resolvePageSize(paper, available))
     }
     calc()
-    const onResize = () => { clearTimeout(timer); timer = setTimeout(calc, 120) }
     let timer = null
+    const onResize = () => {
+      clearTimeout(timer)
+      timer = setTimeout(calc, 120)
+    }
     window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); clearTimeout(timer) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      window.removeEventListener('resize', onResize)
+      clearTimeout(timer)
+    }
   }, [paper])
   // 分页样式：dashed=虚线分页，split=分离页面（WPS 式每页独立）
   const [breakStyle, setBreakStyle] = useState(() => {
@@ -537,14 +533,16 @@ export default function App() {
   }
 
   // 选中改写结果：在文档内呈现内联 diff（原文划线 + 新内容高亮），供接受/撤销
-  const handleInlineDiff = ({ oldHtml, newHtml }) => {
+  const handleInlineDiff = ({ oldHtml, newHtml, range }) => {
     if (!editor) return
-    const { from, to } = editor.state.selection
+    const fallback = editor.state.selection
+    const from = Number.isInteger(range?.from) ? range.from : fallback.from
+    const to = Number.isInteger(range?.to) ? range.to : fallback.to
+    if (from >= to || to > editor.state.doc.content.size) return
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
     const oldText = stripHtml(oldHtml).replace(/\s+/g, ' ').trim()
     const diffHtml = `<span class="ai-inline-old">${esc(oldText)}</span><span class="ai-inline-new">${newHtml}</span>`
     editor.chain().focus().insertContentAt({ from, to }, diffHtml).run()
-    // 渲染后计算 diff 范围，交给 Editor 显示接受卡片
     const view = editor.view
     setTimeout(() => {
       const oldEl = view.dom.querySelector('.ai-inline-old')
@@ -693,7 +691,7 @@ export default function App() {
           <div className="menu-wrap">
             <button
               className="tb-block-btn tb-page-btn"
-              title="宽屏视图 / A4 / B5 纸张"
+              title="文档模式 / 页面模式"
               onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageMenu(!showPageMenu) }}
             >
               {PAPER[paper][0]}
@@ -701,16 +699,16 @@ export default function App() {
             </button>
             {showPageMenu && (
               <div className="menu page-menu" onClick={(e) => e.stopPropagation()}>
-                <div className="settings-label">视图</div>
+                <div className="settings-label">工作模式</div>
                 <button
                   className={`menu-item${paper === 'wide' ? ' active' : ''}`}
                   onClick={() => { setPaper('wide'); setShowPageMenu(false) }}
                 >
-                  <span>宽屏（不分页）</span>
+                  <span>文档模式（无限画布）</span>
                   {paper === 'wide' && <span className="menu-item-check">✓</span>}
                 </button>
                 <div className="menu-sep" />
-                <div className="settings-label">纸张</div>
+                <div className="settings-label">页面模式</div>
                 <button
                   className={`menu-item${paper === 'a4' ? ' active' : ''}`}
                   onClick={() => { setPaper('a4'); setShowPageMenu(false) }}

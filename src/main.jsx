@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './theme.css'
 import './app.css'
+import './design-system.css'
 
 // 错误边界：任何未捕获错误不再白屏，提供一键恢复
 class ErrorBoundary extends React.Component {
