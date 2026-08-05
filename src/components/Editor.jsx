@@ -5,7 +5,13 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { Node, Mark, mergeAttributes } from '@tiptap/core'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
-import { createLowlight, common } from 'lowlight'
+import { createLowlight } from 'lowlight'
+import c from 'highlight.js/lib/languages/c'
+import cpp from 'highlight.js/lib/languages/cpp'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import python from 'highlight.js/lib/languages/python'
+import rust from 'highlight.js/lib/languages/rust'
 import matlab from 'highlight.js/lib/languages/matlab'
 import Underline from '@tiptap/extension-underline'
 import TextStyle from '@tiptap/extension-text-style'
@@ -155,7 +161,13 @@ const Page = Node.create({
 })
 
 // ---------- 代码块：语法高亮（lowlight）+ 默认行号（自定义 NodeView） ----------
-const lowlight = createLowlight(common)
+const lowlight = createLowlight()
+lowlight.register('c', c)
+lowlight.register('cpp', cpp)
+lowlight.register('java', java)
+lowlight.register('javascript', javascript)
+lowlight.register('python', python)
+lowlight.register('rust', rust)
 lowlight.register('matlab', matlab)
 // 可用的语言列表（供语言选择菜单）
 const CODE_LANGUAGES = [
