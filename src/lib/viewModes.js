@@ -1,3 +1,4 @@
+// 文档模式与页面模式共享同一份文档数据，只改变渲染尺寸与分页语义。
 export const PAPER_PRESETS = Object.freeze({
   wide: Object.freeze(['文档', 880, 0]),
   a4: Object.freeze(['A4', 794, 1123]),
