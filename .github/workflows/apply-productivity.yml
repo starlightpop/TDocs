@@ -23,7 +23,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: node scripts/apply-productivity.mjs
+      - name: Apply find, replace and local history
+        run: node scripts/apply-productivity.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
