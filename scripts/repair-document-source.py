@@ -9,7 +9,6 @@ def read(path):
 def write(path, text):
     (ROOT / path).write_text(text, encoding='utf-8')
 
-# Repair Editor after removing the old pagination engine.
 editor = read('src/components/Editor.jsx')
 
 font_style = r'''const FontStyleExt = TextStyle.extend({
@@ -30,17 +29,14 @@ font_style = r'''const FontStyleExt = TextStyle.extend({
     }
   },
 })'''
-editor, count = re.subn(
-    r"const FontStyleExt = TextStyle\.extend\(\{.*?\n\}\)\n\n// ---------- 上标",
-    font_style + "\n\n// ---------- 上标",
-    editor,
-    count=1,
-    flags=re.S,
-)
-if count != 1:
-    raise RuntimeError(f'FontStyleExt repair failed: {count}')
+font_start = editor.find('const FontStyleExt =')
+sup_start = editor.find('const Superscript =', font_start)
+if font_start < 0 or sup_start < 0:
+    raise RuntimeError('FontStyleExt declaration boundaries missing')
+comment_start = editor.rfind('// ----------', font_start, sup_start)
+replacement_end = comment_start if comment_start > font_start else sup_start
+editor = editor[:font_start] + font_style + '\n\n// ---------- 上标 / 下标 ----------\n' + editor[sup_start:]
 
-# Remove pagination-only attributes from the actual CodeBlock extension.
 code_start = editor.find('const CodeBlock = CodeBlockLowlight')
 if code_start < 0:
     raise RuntimeError('CodeBlock declaration missing')
@@ -49,7 +45,6 @@ shortcuts_start = editor.find('  addKeyboardShortcuts()', code_start)
 if attrs_start >= 0 and shortcuts_start > attrs_start:
     editor = editor[:attrs_start] + editor[shortcuts_start:]
 
-# Close the continuous document container before rendering the context menu.
 old_render = '''          <div className="page-wrap" ref={wrapRef}>
             <EditorContent editor={editor} className="page document-page" />
           {ctxMenu && ('''
@@ -64,14 +59,11 @@ editor = editor.replace(
     '// 浏览器与桌面端统一使用中文自绘编辑菜单；普通输入框由 Electron 提供中文原生菜单。\n  // 浏览器开发模式使用自绘菜单；Electron 正式版使用系统原生编辑菜单。',
     '// 编辑器统一使用中文自绘菜单；普通输入框由 Electron 提供中文原生菜单。',
 )
-
-# Enforce that no pagination fragment metadata survives in the editor.
 for token in ('lineStart', 'continued', 'codeId', 'data-line-start', 'data-continued', 'data-code-id'):
     if token in editor:
         raise RuntimeError(f'pagination code attribute still present: {token}')
 write('src/components/Editor.jsx', editor)
 
-# Ensure provider and model dropdowns share one mutually-exclusive open state.
 ai = read('src/components/AiPanel.jsx')
 old_model = '''          <SelectMenu
             value={inList ? cfg.model : '__custom__'}'''
@@ -86,7 +78,6 @@ if 'menuId="provider"' not in ai or 'menuId="model"' not in ai:
     raise RuntimeError('AI dropdown control repair failed')
 write('src/components/AiPanel.jsx', ai)
 
-# Remove dead CSS selectors from the abandoned page/Word experiment.
 css = read('src/app.css')
 keywords = [
     'manual-page-break', 'add-word-page', 'pm-page-wrap', 'page-break-line',
