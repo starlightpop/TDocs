@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('tdocs', {
   runCode: (payload) => ipcRenderer.invoke('run-code', payload),
   readClipboardText: () => ipcRenderer.invoke('clipboard-read-text'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  toggleMaximize: () => ipcRenderer.invoke('toggle-maximize'),
 })

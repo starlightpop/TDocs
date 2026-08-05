@@ -885,14 +885,6 @@ html.platform-mac .topbar .menu {
   background: transparent;
 }
 
-/* 每页（一张 A4/B5 纸）：固定尺寸、对称边距 */
-.editor-content .pm-page-wrap {
-  position: relative;
-  margin: 0 0 28px; /* 页间物理空白（两张纸） */
-}
-.editor-content .pm-page-wrap:last-child {
-  margin-bottom: 0;
-}
 .editor-content [data-page] {
   position: relative;
   width: 100%;
@@ -919,11 +911,7 @@ html.platform-mac .topbar .menu {
   inset: 0;
   pointer-events: none;
 }
-.page-break-line {
-  position: absolute;
-  height: 0;
-  border-top: 1px dashed var(--border-strong);
-}
+
 .page-break-label {
   position: absolute;
   top: -9px;
@@ -2588,16 +2576,7 @@ html.platform-mac .topbar .menu {
 .page.paged .editor-content {
   min-height: 0;
 }
-.editor-content .pm-page-wrap {
-  position: relative;
-  width: var(--page-width);
-  height: calc(var(--page-h) * var(--page-scale, 1));
-  margin: 0 auto calc(28px * var(--page-scale, 1));
-  pointer-events: none;
-}
-.editor-content .pm-page-wrap:last-child {
-  margin-bottom: 0;
-}
+
 .editor-content [data-page] {
   position: absolute;
   inset: 0 auto auto 0;
@@ -2677,9 +2656,7 @@ html.platform-mac .topbar .menu {
 .page.paged .editor-content {
   min-height: 0 !important;
 }
-.editor-content .pm-page-wrap {
-  contain: layout paint;
-}
+
 .editor-content [data-page] {
   backface-visibility: hidden;
   will-change: transform;
@@ -2757,11 +2734,7 @@ html.platform-mac .topbar .menu {
   background: var(--surface-3);
   break-inside: avoid;
 }
-.code-block-shell.continued {
-  margin-top: .25em;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-}
+
 .code-block-head {
   min-height: 32px;
   display: flex;
@@ -2943,7 +2916,7 @@ html.platform-mac .topbar .menu {
 .new-doc-menu small { color: var(--text-3); font-size: 10.5px; font-weight: 400; }
 .doc-item-meta { display: flex; align-items: center; gap: 6px; }
 .doc-kind-badge { padding: 1px 5px; border-radius: 5px; background: var(--surface-3); color: var(--text-3); font-size: 9.5px; line-height: 16px; }
-.doc-kind-badge.word { color: var(--accent); background: var(--accent-soft); }
+
 
 /* Code block header owns language and run controls. */
 .code-block-head-actions { display: inline-flex; align-items: center; gap: 5px; }
@@ -3137,40 +3110,74 @@ html.platform-mac .topbar .menu {
 .code-completion-item strong { overflow: hidden; text-overflow: ellipsis; }
 .code-completion-item span { color: var(--text-3); font-family: var(--font-ui); font-size: 11px; }
 
-.manual-page-break {
-  position: relative;
-  height: 18px;
-  margin: 10px 0;
-  border-top: 1px dashed var(--border-strong);
-  pointer-events: none;
-}
-.manual-page-break span {
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0 7px;
-  background: var(--page-bg);
-  color: var(--text-3);
-  font-size: 10px;
-}
-.add-word-page {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: center;
-  margin: 4px auto 28px;
-  padding: 7px 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text-2);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-}
-.add-word-page:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 
 .code-context-toolbar { min-height: 54px; }
 .code-context-label { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; font-weight: 600; }
 .code-context-hint { color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* ===== 0.2.0-preview：文档工作区统一视觉 ===== */
+.new-doc-split, .new-doc-arrow, .new-doc-menu { display: none !important; }
+.new-doc-button {
+  width: 100%; min-height: 42px; justify-content: center; gap: 8px;
+  border-radius: 11px !important; font-weight: 650; letter-spacing: .01em;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+.main[data-workspace="document"] .canvas { padding: 30px clamp(18px, 4vw, 64px) 96px; }
+.main[data-workspace="document"] .page-wrap { width: min(960px, 100%); margin: 0 auto; }
+.main[data-workspace="document"] .document-page {
+  width: 100%; min-height: calc(100vh - 220px); padding: clamp(44px, 6vw, 78px);
+  border: 1px solid var(--border); border-radius: 16px; background: var(--page-bg);
+  box-shadow: 0 12px 36px rgba(20, 24, 32, .08); transform-origin: top center;
+}
+.settings-dialog { width: min(840px, calc(100vw - 32px)); height: min(620px, calc(100vh - 32px)); overflow: hidden; }
+.settings-dialog-body { min-height: 0; overflow: hidden; }
+.settings-nav { overflow-y: auto; overscroll-behavior: contain; }
+.settings-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.settings-page { min-width: 0; }
+.ai-cfg-grid { align-items: start; }
+.ai-select { position: relative; min-width: 0; }
+.ai-select-btn { width: 100%; min-height: 38px; position: relative; z-index: 1; }
+.ai-select-menu {
+  position: absolute !important; top: calc(100% + 6px) !important; left: 0 !important; right: auto !important;
+  width: min(300px, calc(100vw - 80px)); max-height: 248px; overflow-y: auto;
+  overscroll-behavior: contain; z-index: 980 !important; scrollbar-gutter: stable;
+}
+.ai-cfg-fields > label:nth-child(2) .ai-select-menu { left: auto !important; right: 0 !important; }
+.code-block-shell { --code-font-size: 14px; --code-line-height: 25px; overflow: visible; }
+.code-block-head { min-height: 38px; }
+.code-block-head-actions { display: flex; align-items: center; gap: 8px; position: relative; z-index: 8; }
+.code-language-select {
+  width: 148px; height: 32px; padding: 0 32px 0 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font: 500 12px/1 var(--font-ui); cursor: pointer; pointer-events: auto;
+}
+.code-run-btn { min-height: 32px; border-radius: 8px; }
+.code-block-shell pre {
+  display: grid !important; grid-template-columns: 48px minmax(0, 1fr); align-items: stretch;
+  margin: 0 !important; padding: 0 !important; font: 400 var(--code-font-size)/var(--code-line-height) var(--font-mono) !important;
+}
+.code-block-shell pre code {
+  display: block; min-width: 0; padding: 12px 14px !important; margin: 0 !important;
+  font: inherit !important; line-height: var(--code-line-height) !important; white-space: pre; tab-size: 2;
+}
+.code-gutter {
+  display: flex !important; flex-direction: column; box-sizing: border-box; padding: 12px 0 !important;
+  border-right: 1px solid var(--border); font: 400 var(--code-font-size)/var(--code-line-height) var(--font-mono) !important;
+}
+.code-gutter > span {
+  display: block; height: var(--code-line-height); min-height: var(--code-line-height);
+  line-height: var(--code-line-height) !important; padding: 0 10px 0 4px; box-sizing: border-box;
+  text-align: right; color: var(--text-3);
+}
+.code-gutter > span.active { color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.code-block-footer { min-height: 28px; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; }
+.context-menu .menu-item { min-height: 34px; }
+.topbar { user-select: none; }
+.topbar button, .topbar input, .topbar select, .topbar a { -webkit-app-region: no-drag; }
+@media (max-width: 760px) {
+  .main[data-workspace="document"] .canvas { padding: 16px 10px 72px; }
+  .main[data-workspace="document"] .document-page { padding: 32px 24px; border-radius: 12px; }
+  .settings-dialog-body { grid-template-columns: 132px minmax(0, 1fr); }
+}

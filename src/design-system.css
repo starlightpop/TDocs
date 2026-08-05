@@ -167,13 +167,6 @@ textarea:focus-visible,
 [data-view-mode='page'] .ruler { display: flex; }
 [data-view-mode='document'] .ruler { opacity: .72; }
 
-.pm-page-wrap {
-  border-radius: 2px;
-  box-shadow: var(--page-shadow);
-  overflow: clip;
-}
-
-.pm-page-wrap + .pm-page-wrap { margin-top: 28px; }
 .pm-page-label { color: var(--text-3); font-variant-numeric: tabular-nums; }
 
 .statusbar {

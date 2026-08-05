@@ -68,8 +68,14 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // 使用系统原生编辑菜单，确保粘贴、匹配样式粘贴、拼写建议等行为与 macOS/Windows 一致。
-  win.webContents.on('context-menu', (_event, params) => {
+  // 编辑器使用应用内中文菜单；普通输入框使用中文原生菜单。
+  win.webContents.on('context-menu', async (_event, params) => {
+    const inEditor = await win.webContents.executeJavaScript(
+      `Boolean(document.elementFromPoint(${params.x}, ${params.y})?.closest('.editor-content'))`,
+      true,
+    ).catch(() => false)
+    if (inEditor) return
+    if (!params.isEditable && !params.selectionText) return
     const template = []
     if (params.misspelledWord) {
       for (const suggestion of (params.dictionarySuggestions || []).slice(0, 5)) {
@@ -81,14 +87,21 @@ function createWindow() {
     }
     if (params.isEditable) {
       template.push(
-        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
-        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' },
-        { role: 'delete' }, { type: 'separator' }, { role: 'selectAll' },
+        { label: '撤销', enabled: params.editFlags.canUndo, click: () => win.webContents.undo() },
+        { label: '重做', enabled: params.editFlags.canRedo, click: () => win.webContents.redo() },
+        { type: 'separator' },
+        { label: '剪切', enabled: params.editFlags.canCut, click: () => win.webContents.cut() },
+        { label: '复制', enabled: params.editFlags.canCopy, click: () => win.webContents.copy() },
+        { label: '粘贴', enabled: params.editFlags.canPaste, click: () => win.webContents.paste() },
+        { label: '粘贴并匹配样式', enabled: params.editFlags.canPaste, click: () => win.webContents.pasteAndMatchStyle() },
+        { label: '删除', enabled: params.editFlags.canDelete, click: () => win.webContents.delete() },
+        { type: 'separator' },
+        { label: '全选', enabled: params.editFlags.canSelectAll, click: () => win.webContents.selectAll() },
       )
-    } else if (params.selectionText) {
-      template.push({ role: 'copy' }, { type: 'separator' }, { role: 'selectAll' })
+    } else {
+      template.push({ label: '复制', click: () => win.webContents.copy() }, { type: 'separator' }, { label: '全选', click: () => win.webContents.selectAll() })
     }
-    if (template.length) Menu.buildFromTemplate(template).popup({ window: win })
+    Menu.buildFromTemplate(template).popup({ window: win })
   })
 }
 
@@ -96,6 +109,13 @@ function createWindow() {
 function registerIpc() {
   ipcMain.handle('run-code', async (_event, payload) => runCode(payload))
   ipcMain.handle('clipboard-read-text', () => clipboard.readText())
+  ipcMain.handle('toggle-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
+  })
   ipcMain.handle('open-external', (_event, url) => {
     if (typeof url === 'string' && /^https:\/\//i.test(url)) return shell.openExternal(url)
     return false

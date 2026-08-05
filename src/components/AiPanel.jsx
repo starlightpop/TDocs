@@ -5,27 +5,19 @@ import ContextMenu from './ContextMenu.jsx'
 import { loadApiStore, saveApiStore, callLLM } from '../lib/api.js'
 import { PROVIDERS, getProvider } from '../lib/aiProviders.js'
 
-function SelectMenu({ value, options, onChange }) {
-  const [open, setOpen] = useState(false)
+function SelectMenu({ menuId, openMenu, setOpenMenu, value, options, onChange }) {
+  const open = openMenu === menuId
   const cur = options.find(([v]) => v === value)
-  useEffect(() => {
-    if (!open) return undefined
-    const close = (event) => {
-      if (!event.target.closest?.('.ai-select')) setOpen(false)
-    }
-    document.addEventListener('mousedown', close, true)
-    return () => document.removeEventListener('mousedown', close, true)
-  }, [open])
   return (
     <div className="menu-wrap ai-select">
-      <button className="ai-select-btn" onClick={(e) => { e.stopPropagation(); setOpen((value) => !value) }}>
+      <button className="ai-select-btn" onClick={(e) => { e.stopPropagation(); setOpenMenu(open ? null : menuId) }}>
         <span className="ai-select-label">{cur ? cur[1] : '自定义…'}</span>
         <Icon name="chevronDown" size={12} />
       </button>
       {open && (
         <div className="menu ai-select-menu" onClick={(e) => e.stopPropagation()}>
           {options.map(([v, label]) => (
-            <button key={v} className={`menu-item${v === value ? ' active' : ''}`} onClick={() => { onChange(v); setOpen(false) }}>
+            <button key={v} className={`menu-item${v === value ? ' active' : ''}`} onClick={() => { onChange(v); setOpenMenu(null) }}>
               <span>{label}</span>
               {v === value && <span className="menu-item-check">✓</span>}
             </button>
@@ -54,6 +46,14 @@ export default function AiPanel({ embedded = false, onClose }) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
   const [keyMenu, setKeyMenu] = useState(null)
+  const [openMenu, setOpenMenu] = useState(null)
+
+  useEffect(() => {
+    if (!openMenu) return undefined
+    const close = (event) => { if (!event.target.closest?.('.ai-select')) setOpenMenu(null) }
+    document.addEventListener('mousedown', close, true)
+    return () => document.removeEventListener('mousedown', close, true)
+  }, [openMenu])
 
   const selectProvider = (id) => {
     const nextCfg = profileFor(store, id)
@@ -118,7 +118,7 @@ export default function AiPanel({ embedded = false, onClose }) {
       <div className="ai-cfg-fields ai-cfg-grid">
         <label>
           厂商
-          <SelectMenu value={providerId} options={PROVIDERS.map((item) => [item.id, item.name])} onChange={selectProvider} />
+          <SelectMenu menuId="provider" openMenu={openMenu} setOpenMenu={setOpenMenu} value={providerId} options={PROVIDERS.map((item) => [item.id, item.name])} onChange={selectProvider} />
         </label>
         <label>
           接口地址（OpenAI 兼容）
@@ -148,6 +148,9 @@ export default function AiPanel({ embedded = false, onClose }) {
         <label>
           模型名称
           <SelectMenu
+            menuId="model"
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
             value={inList ? cfg.model : '__custom__'}
             options={[...modelList.map((model) => [model, model]), ['__custom__', '自定义…']]}
             onChange={(value) => update({ model: value === '__custom__' ? '' : value })}

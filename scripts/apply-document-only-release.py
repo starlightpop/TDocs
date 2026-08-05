@@ -343,7 +343,6 @@ editor = editor.replace("import { DOMParser as PMDOMParser, DOMSerializer } from
 editor = editor.replace("import { canSplit } from '@tiptap/pm/transform'\n", '')
 editor = sub_once(r"\n// ---------- 页节点.*?\n// ---------- 代码块", "\n// ---------- 代码块", editor, 'page nodes')
 editor = editor.replace("const createCodeId = () => `code-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`\n", '')
-editor = sub_once(r"  addAttributes\(\) \{.*?\n  \},\n  addKeyboardShortcuts", "  addKeyboardShortcuts", editor, 'code pagination attrs')
 editor = editor.replace("    runButton.title = '运行整个逻辑代码块'", "    runButton.title = '运行当前代码块'")
 editor = editor.replace("            codeId: node.attrs.codeId || null,\n", '')
 editor = editor.replace("        const start = Math.max(1, Number(node.attrs.lineStart) || 1)\n", "        const start = 1\n")

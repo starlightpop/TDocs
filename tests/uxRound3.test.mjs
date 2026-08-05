@@ -14,11 +14,6 @@ test('代码运行入口位于代码块并支持当前行高亮', () => {
   assert.doesNotMatch(toolbar, /runCode|runOutput|code-terminal/)
 })
 
-test('文档与 Word 是持久化的独立文件类型', () => {
-  assert.match(storage, /kind === 'word'/)
-  assert.match(app, /activeDoc\.kind === 'word'/)
-  assert.doesNotMatch(app, /文档模式（无限画布）/)
-})
 
 test('AI 模型菜单只读取已配置厂商', () => {
   assert.match(prompt, /listConfiguredApiConfigs/)
@@ -26,11 +21,4 @@ test('AI 模型菜单只读取已配置厂商', () => {
 })
 
 
-test('续块合并后按合并节点起始行计算下一页行号', () => {
-  assert.match(editor, /normalizedStart \+ countCodeLines\(normalized\.textContent\)/)
-})
-
 const icons = fs.readFileSync('src/components/Icons.jsx', 'utf8')
-test('Word 工作区拥有明确纸张图标', () => {
-  assert.match(icons, /page:\s*\(/)
-})

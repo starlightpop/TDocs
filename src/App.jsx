@@ -17,48 +17,41 @@ import {
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 import { renderMarkdown } from './lib/markdown.js'
-import { PAPER_PRESETS as PAPER, normalizePaper, resolvePageSize, viewModeForPaper } from './lib/viewModes.js'
 import { saveVersionSnapshot } from './lib/versionHistory.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs</h1>
-<p>TDocs 0.2.0-preview 是一个本地优先的文档与 Word 双工作区编辑器。欢迎文件默认置顶，也可以删除。</p>
-<h2>文档工作区</h2>
+<p>TDocs 0.2.0-preview 聚焦稳定的本地文档编辑，不再包含尚未完成的 Word/A4/B5 工作区。欢迎文件默认置顶，也可以删除。</p>
+<h2>文档编辑</h2>
 <ul>
-  <li>连续画布写作、标题大纲、查找替换、自动保存与本地版本历史</li>
-  <li>富文本格式、列表、任务清单、引用、表格、图片、链接与 Markdown 粘贴</li>
-  <li>浅色、深色及跟随系统主题，支持多档缩放</li>
-</ul>
-<h2>Word 工作区</h2>
-<ul>
-  <li>A4 / B5 固定纸张、页边距标尺、自动分页、页码和显式分页符</li>
-  <li>按 ⌘/Ctrl + Enter 插入分页符，也可以在页面底部点击“添加页面”</li>
-  <li>Word 文件与连续文档是独立文件类型，内容可通过复制粘贴迁移</li>
+  <li>连续画布、标题大纲、查找替换、自动保存与本地版本历史</li>
+  <li>标题、列表、任务清单、引用、表格、图片、链接及 Markdown 粘贴</li>
+  <li>浅色、深色、跟随系统主题和多档界面缩放</li>
 </ul>
 <h2>代码块</h2>
 <ul>
   <li>C、C++、Java、JavaScript、Python、Rust、MATLAB / Octave 语法高亮</li>
-  <li>连续行号、当前行高亮、前缀补全建议、块内运行按钮和可拖动运行结果</li>
-  <li>JavaScript 使用应用自带运行环境；其他语言使用电脑中已安装并加入 PATH 的运行环境</li>
+  <li>统一行高、当前行号高亮、前缀补全、块内语言选择和运行按钮</li>
+  <li>JavaScript 使用应用自带环境；其他语言调用电脑中已安装并加入 PATH 的运行环境</li>
+  <li>缺少运行环境时会说明原因，并提供官方安装页面与系统对应命令</li>
 </ul>
 <h2>AI 改写</h2>
 <ul>
-  <li>选区保持高亮、润色、精简、扩写、正式化、口语化及自定义指令</li>
-  <li>模型按厂商独立配置，改写窗口只显示已经配置完成的厂商与模型</li>
+  <li>选中文字后保持 AI 专属高亮，支持润色、精简、扩写、正式化、口语化和自定义指令</li>
+  <li>模型按厂商独立配置，改写窗口只显示已经完成配置的模型</li>
   <li>支持内联差异预览、接受和撤销</li>
 </ul>
 <h2>文件与输出</h2>
 <ul>
-  <li>文件夹、置顶、拖拽移动、内联重命名、本地文件导入</li>
+  <li>文件夹、置顶、拖拽移动、内联重命名和本地文件导入</li>
   <li>导出 PDF、DOCX、EPUB、Markdown、HTML 和纯文本</li>
-  <li>原生右键菜单支持撤销、重做、剪切、复制、粘贴、匹配样式粘贴、删除和全选</li>
+  <li>中文右键菜单支持撤销、重做、剪切、复制、粘贴、全选，以及文字格式和 AI 操作</li>
 </ul>
 <h2>常用快捷键</h2>
 <table><tbody>
 <tr><th><p>操作</p></th><th><p>快捷键</p></th></tr>
 <tr><td><p>查找与替换</p></td><td><p>⌘ / Ctrl + F</p></td></tr>
 <tr><td><p>撤销 / 重做</p></td><td><p>⌘ / Ctrl + Z / Shift + Z</p></td></tr>
-<tr><td><p>插入分页符</p></td><td><p>⌘ / Ctrl + Enter（Word）</p></td></tr>
 <tr><td><p>代码补全</p></td><td><p>Tab</p></td></tr>
 <tr><td><p>退出代码块</p></td><td><p>空选区时 ⌘ / Ctrl + C，或点击代码块外</p></td></tr>
 </tbody></table>
@@ -66,18 +59,20 @@ const WELCOME_HTML = `
 <h2>版本更新</h2>
 <h3>0.2.0-preview（当前版本）</h3>
 <ul>
-  <li>文档与 Word 工作区分离；新增 A4/B5、分页符与空白页保护</li>
-  <li>代码块改为独立交互，增加前缀补全、运行环境诊断与官方安装入口</li>
-  <li>新增中央设置中心、多厂商 AI 配置、模型识别修复、置顶文件和原生右键菜单</li>
+  <li>删除不稳定的 Word/A4/B5、分页节点、分页符和代码块拆分逻辑</li>
+  <li>统一文档工作区、设置中心、菜单层级和整体视觉</li>
+  <li>恢复中文完整右键菜单，修复代码块行号、语言选择和 macOS 窗口交互</li>
+  <li>保留并稳定 AI 改写、查找替换、版本历史、代码运行和多格式导出</li>
 </ul>
-<h3>0.1.1-preview（上一个版本）</h3>
+<h3>0.1.2-preview（上一开发版本）</h3>
 <ul>
-  <li>加入基础分页、深色主题、AI 改写、代码运行、查找替换和版本历史</li>
+  <li>建立 AI 选区高亮、多厂商配置、查找替换、本地版本历史和代码运行基础</li>
+  <li>曾试验分页工作区；该试验没有达到发布标准，已从 0.2.0-preview 中完整移除</li>
 </ul>
 <blockquote><p>文档内容与配置默认保存在本机。AI 请求和外部下载只在你主动使用对应功能时发生。</p></blockquote>
 `
 
-const WELCOME_SEED_KEY = 'inkdocs.welcomeSeed.0.2.0-preview'
+const WELCOME_SEED_KEY = 'inkdocs.welcomeSeed.0.2.0-document-preview'
 
 export default function App() {
   // ---------- 主题：支持 跟随系统 / 浅色 / 深色 ----------
@@ -97,7 +92,7 @@ export default function App() {
   const theme = themePref === 'system' ? (systemDark ? 'dark' : 'light') : themePref
 
   // ---------- 整体配色主题：浅色系 / 深色系各 4 套 ----------
-  // 每套定义整套界面 + 纸张配色，不再是单独的“页面颜色”
+  // 每套定义完整界面与编辑区域配色，不再是单独的“页面颜色”
   const THEMES = {
     clean: {
       name: '清新白', mode: 'light', accent: '#4f6ef7',
@@ -219,47 +214,6 @@ export default function App() {
     localStorage.setItem('inkdocs.accent', activeTheme.accent)
   }, [activeTheme])
 
-  // ---------- 工作模式：文档（无限画布）/ 页面（Word/WPS 式纸张） ----------
-  const [paper, setPaper] = useState(() => normalizePaper(localStorage.getItem('inkdocs.paper')))
-  const viewMode = viewModeForPaper(paper)
-  useEffect(() => {
-    document.documentElement.setAttribute('data-view-mode', viewMode)
-  }, [viewMode])
-  // 页面模式使用固定物理基准尺寸。缩放只改变整张纸的视觉比例，不改变排版容量。
-  const pageSize = useMemo(() => resolvePageSize(paper), [paper])
-  // 分页样式：dashed=虚线分页，split=分离页面（WPS 式每页独立）
-  const [breakStyle, setBreakStyle] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.breakStyle')
-    return saved === 'split' ? 'split' : 'dashed'
-  })
-  useEffect(() => {
-    localStorage.setItem('inkdocs.paper', paper)
-  }, [paper])
-  useEffect(() => {
-    localStorage.setItem('inkdocs.breakStyle', breakStyle)
-  }, [breakStyle])
-  // 页码标签样式：pair=第 1 页 / 第 2 页（上下页），total=第 1 页 / 共 12 页（当前页/总页数）
-  const [pageLabelStyle, setPageLabelStyle] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.pageLabelStyle')
-    return saved === 'pair' ? 'pair' : 'total'
-  })
-  useEffect(() => {
-    localStorage.setItem('inkdocs.pageLabelStyle', pageLabelStyle)
-  }, [pageLabelStyle])
-
-  // ---------- 页边距（左右宽距）：数值型，可拖标尺微调，也可点击预设档位 ----------
-  const PADS = { narrow: ['窄', 40], normal: ['常规', 72], wide: ['宽', 104] }
-  const [pagePad, setPagePad] = useState(() => {
-    const saved = localStorage.getItem('inkdocs.pagePad')
-    // 兼容旧版档位 key
-    if (PADS[saved]) return PADS[saved][1]
-    const n = Number(saved)
-    return n >= 24 && n <= 160 ? n : 72
-  })
-  useEffect(() => {
-    localStorage.setItem('inkdocs.pagePad', String(pagePad))
-  }, [pagePad])
-
   // ---------- 文档 ----------
   const [docs, setDocs] = useState(() => {
     const existing = loadDocs()
@@ -297,42 +251,17 @@ export default function App() {
   const [selectedChars, setSelectedChars] = useState(0)
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [showPageMenu, setShowPageMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showOutline, setShowOutline] = useState(false)
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
-  const [rulerOpen, setRulerOpen] = useState(false)
-  const rulerRef = useRef(null)
-  const rulerDownRef = useRef(null)
   const zoomAnchorRef = useRef(null)
   const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
   const lastSelectionRef = useRef(null)
 
-  // 拖动标尺灰白交界：连续调整页边距（24~160px）
-  const startRulerDrag = (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const ruler = rulerRef.current
-    if (!ruler) return
-    const startX = e.clientX
-    const startPad = pagePad
-    const scale = paper === 'wide' ? 1 : zoom
-    const onMove = (ev) => {
-      const dx = (ev.clientX - startX) / scale
-      const next = Math.min(160, Math.max(24, startPad + dx))
-      setPagePad(Math.round(next))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
   const [headings, setHeadings] = useState([])
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(-1)
   const [modal, setModal] = useState(null) // {type:'rename'|'delete', doc}
@@ -357,11 +286,11 @@ export default function App() {
 
   const activeDoc = useMemo(() => docs.find((d) => d.id === activeId) || null, [docs, activeId])
 
-  useEffect(() => {
-    if (!activeDoc) return
-    const nextPaper = activeDoc.kind === 'word' ? (activeDoc.paper === 'b5' ? 'b5' : 'a4') : 'wide'
-    if (paper !== nextPaper) setPaper(nextPaper)
-  }, [activeDoc?.id, activeDoc?.kind, activeDoc?.paper])
+  const handleTitlebarDoubleClick = (event) => {
+    if (event.target.closest?.('button, input, select, textarea, a, [data-no-drag]')) return
+    window.tdocs?.toggleMaximize?.()
+  }
+
 
   // 初次加载修正 activeId
   useEffect(() => {
@@ -376,37 +305,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('inkdocs.zoom', String(zoom))
   }, [zoom])
-
-  // 页面缩放后按比例修正滚动坐标并钳制到新画布范围，避免缩小后停在不存在的空白区域。
-  useEffect(() => {
-    const previous = previousZoomRef.current || 1
-    previousZoomRef.current = zoom
-    if (paper === 'wide') return
-    const canvas = mainRef.current?.querySelector('.canvas')
-    if (!canvas) return
-    const ratio = zoom / previous
-    const frame = requestAnimationFrame(() => {
-      canvas.scrollTop *= ratio
-      canvas.scrollLeft *= ratio
-      requestAnimationFrame(() => {
-        canvas.scrollTop = Math.max(0, Math.min(canvas.scrollTop, canvas.scrollHeight - canvas.clientHeight))
-        canvas.scrollLeft = Math.max(0, Math.min(canvas.scrollLeft, canvas.scrollWidth - canvas.clientWidth))
-        window.dispatchEvent(new Event('tdocs:layout'))
-      })
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [zoom, paper])
-
-  const changePaper = (nextPaper) => {
-    if (!activeDoc || activeDoc.kind !== 'word' || !['a4', 'b5'].includes(nextPaper) || nextPaper === paper) return
-    setPaper(nextPaper)
-    persist(docs.map((doc) => (doc.id === activeDoc.id ? { ...doc, paper: nextPaper, updatedAt: Date.now() } : doc)))
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const canvas = mainRef.current?.querySelector('.canvas')
-      if (canvas) { canvas.scrollTop = 0; canvas.scrollLeft = 0 }
-      window.dispatchEvent(new Event('tdocs:layout'))
-    }))
-  }
 
   // 缩放菜单始终锚定状态栏按钮。大纲、侧边栏或窗口尺寸变化时重新计算。
   useEffect(() => {
@@ -475,12 +373,11 @@ export default function App() {
   }, [])
 
   // ---------- 操作 ----------
-  const handleCreate = (kind = 'document', group = '') => {
-    const doc = createDoc(kind === 'word' ? '无标题 Word' : '无标题文档', '', { kind, paper: 'a4', group })
+  const handleCreate = (group = '') => {
+    const doc = createDoc('无标题文档', '', { group })
     doc.group = group || ''
     persist([doc, ...docs])
     setActiveId(doc.id)
-    setPaper(kind === 'word' ? 'a4' : 'wide')
     setEditor(null)
     setHeadings([])
   }
@@ -494,8 +391,6 @@ export default function App() {
       setTreeOpen((v) => !v)
       return
     }
-    const target = docs.find((doc) => doc.id === id)
-    setPaper(target?.kind === 'word' ? (target.paper === 'b5' ? 'b5' : 'a4') : 'wide')
     setActiveId(id)
     setEditor(null)
     setHeadings([])
@@ -562,7 +457,7 @@ export default function App() {
 
   // 文件重命名：直接原处内联编辑后提交
   const doRenameDoc = (doc, name) => {
-    const fallback = doc.kind === 'word' ? '无标题 Word' : '无标题文档'
+    const fallback = '无标题文档'
     persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || fallback, updatedAt: Date.now() } : d)))
   }
 
@@ -753,18 +648,16 @@ export default function App() {
   // 统一菜单互斥：打开任意一个，关闭其他所有（含缩放/标尺）
   const closeAllMenus = () => {
     setShowExportMenu(false)
-    setShowPageMenu(false)
     setZoomMenuOpen(false)
-    setRulerOpen(false)
   }
 
   // 点击外部关闭所有浮层菜单（互斥 + 全局关闭统一）
   useEffect(() => {
-    if (!showExportMenu && !showPageMenu && !zoomMenuOpen && !rulerOpen) return
+    if (!showExportMenu && !zoomMenuOpen) return
     const close = () => closeAllMenus()
     setTimeout(() => window.addEventListener('click', close), 0)
     return () => window.removeEventListener('click', close)
-  }, [showExportMenu, showPageMenu, zoomMenuOpen, rulerOpen])
+  }, [showExportMenu, zoomMenuOpen])
 
   // 窗口过窄时自动收起侧边栏大纲树，避免页面被挤压遮挡
   useEffect(() => {
@@ -830,7 +723,7 @@ export default function App() {
       onDrop={handleWindowDrop}
     >
       {/* 顶部栏 */}
-      <header className="topbar">
+      <header className="topbar" onDoubleClick={handleTitlebarDoubleClick}>
         <button className="icon-btn" data-tip="切换侧边栏" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
           <Icon name="sidebar" />
         </button>
@@ -841,7 +734,7 @@ export default function App() {
         <input
           className="doc-title-input"
           value={activeDoc?.title || ''}
-          placeholder={activeDoc?.kind === 'word' ? '无标题 Word' : '无标题文档'}
+          placeholder="无标题文档"
           disabled={!activeDoc}
           onChange={(e) => handleTitleChange(e.target.value)}
         />
@@ -865,21 +758,7 @@ export default function App() {
             <Icon name="undo" />
           </button>
 
-          {activeDoc?.kind === 'word' ? (
-            <div className="menu-wrap">
-              <button className="tb-block-btn tb-page-btn workspace-word-btn" title="Word 纸张大小" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowPageMenu(!showPageMenu) }}>
-                Word · {PAPER[paper][0]}
-                <Icon name="chevronDown" size={13} />
-              </button>
-              {showPageMenu && (
-                <div className="menu page-menu" onClick={(e) => e.stopPropagation()}>
-                  <div className="settings-label">纸张大小</div>
-                  <button className={`menu-item${paper === 'a4' ? ' active' : ''}`} onClick={() => { changePaper('a4'); setShowPageMenu(false) }}><span>A4</span>{paper === 'a4' && <span className="menu-item-check">✓</span>}</button>
-                  <button className={`menu-item${paper === 'b5' ? ' active' : ''}`} onClick={() => { changePaper('b5'); setShowPageMenu(false) }}><span>B5</span>{paper === 'b5' && <span className="menu-item-check">✓</span>}</button>
-                </div>
-              )}
-            </div>
-          ) : <span className="workspace-mode-badge"><Icon name="doc" size={13} />文档</span>}
+          <span className="workspace-mode-badge"><Icon name="doc" size={13} />文档</span>
 
           {/* 设置统一使用中央分类窗口。 */}
           <button className={`icon-btn${showSettings ? ' active' : ''}`} data-tip="设置" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(true) }}>
@@ -902,7 +781,7 @@ export default function App() {
                     <Icon name="download" size={15} />PDF (.pdf)
                   </button>
                   <button className="menu-item" onClick={() => doExport('docx')}>
-                    <Icon name="doc" size={15} />Word (.docx)
+                    <Icon name="doc" size={15} />DOCX (.docx)
                   </button>
                   <button className="menu-item" onClick={() => doExport('epub')}>
                     <Icon name="doc" size={15} />EPUB (.epub)
@@ -952,74 +831,15 @@ export default function App() {
 
         <main
           className="main"
-          data-workspace={activeDoc?.kind || 'document'}
+          data-workspace="document"
           ref={mainRef}
-          style={{
-            '--doc-zoom': paper === 'wide' ? zoom : 1,
-            '--page-width': `${paper === 'wide' ? pageSize.w : Math.round(pageSize.w * zoom)}px`,
-            '--page-base-width': `${pageSize.w}px`,
-            '--page-h': `${pageSize.h}px`,
-            '--page-scale': paper === 'wide' ? 1 : zoom,
-            '--page-pad': `${pagePad}px`,
-          }}
+          style={{ '--doc-zoom': zoom }}
         >
           {activeDoc ? (
             <div className="main-col">
-              <Toolbar editor={editor} onAi={openAi} isWord={activeDoc.kind === 'word'} />
+              <Toolbar editor={editor} onAi={openAi} />
               {showFindReplace && (
                 <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
-              )}
-              {activeDoc.kind === 'word' && (
-              <>
-              {/* 边距标尺（Word/WPS 式）：宽度与页面文字区对齐，可拖动灰白交界调边距，点击弹预设档位 */}
-              <div
-                className="ruler"
-                ref={rulerRef}
-                title="拖动标尺边缘调整页边距；点击弹出预设档位"
-                onMouseDown={(e) => {
-                  if (e.target.closest('.ruler-grip-l, .ruler-grip-r')) return
-                  // 记录点击位置，避免拖动与弹菜单冲突
-                  rulerDownRef.current = { x: e.clientX, y: e.clientY, open: rulerOpen }
-                }}
-                onClick={(e) => {
-                  if (e.target.closest('.ruler-grip-l, .ruler-grip-r')) return
-                  const d = rulerDownRef.current
-                  if (d && (Math.abs(e.clientX - d.x) > 4 || Math.abs(e.clientY - d.y) > 4)) return
-                  closeAllMenus()
-                  setRulerOpen(!rulerOpen)
-                }}
-              >
-                <div className="ruler-track">
-                  <div className="ruler-margin-l" style={{ width: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }} />
-                  <div className="ruler-text" />
-                  <div className="ruler-margin-r" style={{ width: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }} />
-                </div>
-                <div
-                  className="ruler-grip-l"
-                  style={{ left: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }}
-                  onMouseDown={(e) => startRulerDrag(e)}
-                />
-                <div
-                  className="ruler-grip-r"
-                  style={{ right: `${Math.round(pagePad * (paper === 'wide' ? 1 : zoom))}px` }}
-                  onMouseDown={(e) => startRulerDrag(e)}
-                />
-                {rulerOpen && (
-                  <div className="menu ruler-menu" onClick={(e) => e.stopPropagation()}>
-                    {Object.entries(PADS).map(([k, [label, v]]) => (
-                      <button
-                        key={k}
-                        className={`menu-item${pagePad === v ? ' active' : ''}`}
-                        onClick={() => { setPagePad(v); setRulerOpen(false) }}
-                      >
-                        <span>{label}边距（{v}px）</span>
-                        {pagePad === v && <span className="menu-item-check">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              </>
               )}
               {/* key 保证切换文档时编辑器重新初始化 */}
               <Editor
@@ -1030,15 +850,9 @@ export default function App() {
                 onHeadings={setHeadings}
                 onReady={setEditor}
                 onAi={openAi}
-                paged={activeDoc.kind === 'word'}
-                pageH={pageSize.h}
-                breakStyle={breakStyle}
-                pageLabelStyle={pageLabelStyle}
                 onSelection={setSelectedChars}
                 onSelectionRange={(range) => { lastSelectionRef.current = range }}
                 aiSelection={aiPrompt?.selection || null}
-                layoutKey={`${activeDoc.kind}:${paper}:${pageSize.w}:${pageSize.h}:${pagePad}`}
-                visualScale={zoom}
                 aiInline={aiInline}
                 onResolveInline={() => setAiInline(null)}
               />
@@ -1091,7 +905,7 @@ export default function App() {
             <div className="welcome">
               <div className="big-icon"><Icon name="doc" size={64} /></div>
               <h2>还没有文档</h2>
-              <button className="btn btn-primary" onClick={() => handleCreate('document')}>
+              <button className="btn btn-primary" onClick={() => handleCreate()}>
                 <Icon name="plus" size={15} />创建第一篇文档
               </button>
             </div>
@@ -1139,13 +953,6 @@ export default function App() {
           darkKey={darkKey}
           setLightKey={setLightKey}
           setDarkKey={setDarkKey}
-          isWord={activeDoc?.kind === 'word'}
-          breakStyle={breakStyle}
-          setBreakStyle={setBreakStyle}
-          pageLabelStyle={pageLabelStyle}
-          setPageLabelStyle={setPageLabelStyle}
-          pagePad={pagePad}
-          setPagePad={setPagePad}
         />
       )}
 

@@ -5,15 +5,12 @@ import AiPanel from './AiPanel.jsx'
 const TABS = [
   ['general', '常规', 'doc'],
   ['appearance', '外观', 'highlight'],
-  ['word', 'Word', 'page'],
   ['ai', 'AI 模型', 'sparkle'],
 ]
 
 export default function SettingsDialog({
   onClose, themePref, setThemePref, themes, themeGroups, theme,
   lightKey, darkKey, setLightKey, setDarkKey,
-  isWord, breakStyle, setBreakStyle, pageLabelStyle, setPageLabelStyle,
-  pagePad, setPagePad,
 }) {
   const [tab, setTab] = useState('general')
   useEffect(() => {
@@ -26,7 +23,7 @@ export default function SettingsDialog({
     <div className="settings-dialog-mask" onMouseDown={onClose}>
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置" onMouseDown={(event) => event.stopPropagation()}>
         <header className="settings-dialog-head">
-          <div><strong>设置</strong><span>所有应用设置集中在这里</span></div>
+          <div><strong>设置</strong><span>应用、外观和 AI 配置</span></div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={15} /></button>
         </header>
         <div className="settings-dialog-body">
@@ -38,12 +35,12 @@ export default function SettingsDialog({
           <div className="settings-content">
             {tab === 'general' && (
               <div className="settings-page">
-                <h2>工作区</h2>
+                <h2>文档工作区</h2>
                 <div className="workspace-settings-card">
-                  <div className={`workspace-kind-icon${isWord ? ' word' : ''}`}><Icon name="doc" size={24} /></div>
-                  <div><strong>当前文件：{isWord ? 'Word 文件' : '文档文件'}</strong><p>两类文件采用独立排版系统，不能在原文件中互相转换。需要迁移内容时，请复制文字并粘贴到另一类新文件。</p></div>
+                  <div className="workspace-kind-icon"><Icon name="doc" size={24} /></div>
+                  <div><strong>本地优先的连续文档</strong><p>所有文件使用统一的连续画布。内容自动保存在本机，并支持大纲、查找替换、版本历史、代码块和多格式导出。</p></div>
                 </div>
-                <div className="settings-note">文档文件使用连续画布；Word 文件使用固定纸张、页边距和分页。</div>
+                <div className="settings-note">0.2.0-preview 已移除未达到发布标准的 Word/A4/B5 试验功能。</div>
               </div>
             )}
             {tab === 'appearance' && (
@@ -77,18 +74,6 @@ export default function SettingsDialog({
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-            {tab === 'word' && (
-              <div className="settings-page">
-                <h2>Word 排版</h2>
-                {!isWord ? <div className="settings-empty-state">这些设置只作用于 Word 文件。当前打开的是文档文件。</div> : (
-                  <>
-                    <div className="settings-field-group"><label>分页样式</label><div className="settings-seg settings-seg-wide"><button className={breakStyle === 'dashed' ? 'active' : ''} onClick={() => setBreakStyle('dashed')}>连续页</button><button className={breakStyle === 'split' ? 'active' : ''} onClick={() => setBreakStyle('split')}>分离页</button></div></div>
-                    <div className="settings-field-group"><label>页码标签</label><div className="settings-seg settings-seg-wide"><button className={pageLabelStyle === 'total' ? 'active' : ''} onClick={() => setPageLabelStyle('total')}>当前 / 总数</button><button className={pageLabelStyle === 'pair' ? 'active' : ''} onClick={() => setPageLabelStyle('pair')}>相邻页</button></div></div>
-                    <div className="settings-field-group"><label>页边距</label><input className="settings-range" type="range" min="24" max="160" value={pagePad} onChange={(event) => setPagePad(Number(event.target.value))} /><span className="settings-range-value">{pagePad}px</span></div>
-                  </>
-                )}
               </div>
             )}
             {tab === 'ai' && <div className="settings-page"><h2>AI 模型</h2><AiPanel embedded /></div>}

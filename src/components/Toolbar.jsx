@@ -21,7 +21,7 @@ const BLOCK_OPTIONS = [
   ['blockquote', '引用'],
   ['codeBlock', '代码块'],
 ]
-// 中文字号（参考 Word/WPS）：名称 → 像素值
+// 中文字号名称 → 像素值
 const CN_SIZES = [
   ['初号', 42], ['小初', 36], ['一号', 26], ['小一', 24], ['二号', 22], ['小二', 18],
   ['三号', 16], ['小三', 15], ['四号', 14], ['小四', 12], ['五号', 10.5], ['小五', 9],
@@ -60,7 +60,7 @@ function TB({ icon, title, active, disabled, onClick }) {
   )
 }
 
-export default function Toolbar({ editor, onAi, isWord = false }) {
+export default function Toolbar({ editor, onAi }) {
   const [showTextColor, setShowTextColor] = useState(false)
   const [showHighlight, setShowHighlight] = useState(false)
   const [showTableGrid, setShowTableGrid] = useState(false)
@@ -86,7 +86,6 @@ export default function Toolbar({ editor, onAi, isWord = false }) {
       <div className="toolbar code-context-toolbar">
         <TB icon="undo" title="撤销 (⌘Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
         <TB icon="redo" title="重做 (⌘⇧Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
-        {isWord && <TB icon="page" title="在代码块后插入分页符" onClick={() => editor.chain().focus().insertPageBreak().run()} />}
         <div className="divider" />
         <span className="code-context-label"><Icon name="codeBlock" size={15} />代码编辑</span>
         <span className="code-context-hint">语言、补全和运行位于代码块内部；右键使用系统编辑菜单</span>
@@ -157,7 +156,6 @@ export default function Toolbar({ editor, onAi, isWord = false }) {
 
       <TB icon="undo" title="撤销 (⌘Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
       <TB icon="redo" title="重做 (⌘⇧Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
-      {isWord && <TB icon="page" title="插入分页符 (⌘/Ctrl+Enter)" onClick={() => editor.chain().focus().insertPageBreak().run()} />}
       <div className="divider" />
 
       {/* 段落样式：再次点击当前样式 → 恢复正文 */}

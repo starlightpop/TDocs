@@ -16,21 +16,6 @@ test('代码补全从首字母开始提供候选，而非要求完整触发词',
   assert.equal(resolveCodeCompletion('javascript', 'con')?.insert, 'console.log()')
 })
 
-test('代码块选区不会显示普通富文本浮动菜单', () => {
-  assert.match(editor, /from === to \|\| inCode/)
-  assert.match(editor, /if \(window\.tdocs\) return/)
-})
-
-test('Electron 原生右键菜单包含粘贴与匹配样式粘贴', () => {
-  assert.match(main, /role: 'paste'/)
-  assert.match(main, /role: 'pasteAndMatchStyle'/)
-})
-
-test('Word 支持显式分页符和添加页面', () => {
-  assert.match(editor, /name: 'pageBreak'/)
-  assert.match(editor, /add-word-page/)
-  assert.match(editor, /current\.node\.lastChild\?\.type\.name === 'pageBreak'/)
-})
 
 test('运行环境缺失时返回官方安装信息', () => {
   assert.match(runner, /INSTALL_HELP/)
@@ -43,10 +28,6 @@ test('DeepSeek 配置可按接口地址推断厂商', () => {
   assert.match(api, /inferProviderId/)
 })
 
-test('新建文件默认不继承当前文件夹且 Word 使用独立标题', () => {
-  assert.match(app, /kind === 'word' \? '无标题 Word'/)
-  assert.match(app, /doc\.group = group \|\| ''/)
-})
 
 test('欢迎文件和普通文件均支持置顶', () => {
   assert.match(app, /pinned: true, isWelcome: true/)
