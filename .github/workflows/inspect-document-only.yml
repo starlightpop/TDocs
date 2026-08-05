@@ -8,11 +8,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Print structural markers
+      - name: Print structural ranges
         run: |
-          echo '=== App markers ==='
-          grep -nE "工作模式|文档 ----------|拖动标尺|操作 ----------|kind === 'word'|showPageMenu|rulerOpen|pagePad|breakStyle|pageLabelStyle|<Editor|<SettingsDialog|<Sidebar" src/App.jsx || true
-          echo '=== Editor markers ==='
-          grep -nE "页节点|分页留白|真分页|版式切换|编辑时实时重排|分页模式|export default function Editor|PagePadExtension|reflow|paged|pageH|breakOffsets|visualScale|layoutKey" src/components/Editor.jsx || true
-          echo '=== Toolbar / Sidebar / Settings ==='
-          grep -nE "isWord|Word|word|page|createMenuOpen|new-doc-split" src/components/Toolbar.jsx src/components/Sidebar.jsx src/components/SettingsDialog.jsx || true
+          echo '=== App state and handlers ==='
+          nl -ba src/App.jsx | sed -n '285,380p'
+          echo '=== App operations ==='
+          nl -ba src/App.jsx | sed -n '350,590p'
+          echo '=== App effects and topbar ==='
+          nl -ba src/App.jsx | sed -n '735,930p'
+          echo '=== App editor area ==='
+          nl -ba src/App.jsx | sed -n '920,1160p'
+          echo '=== Editor initialization ==='
+          nl -ba src/components/Editor.jsx | sed -n '450,790p'
+          echo '=== Editor pagination ==='
+          nl -ba src/components/Editor.jsx | sed -n '760,1220p'
+          echo '=== Editor render ==='
+          nl -ba src/components/Editor.jsx | sed -n '1230,1385p'
