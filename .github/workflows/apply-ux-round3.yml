@@ -6,6 +6,7 @@ on:
       - agent/tdocs-word-docs-foundation
     paths:
       - scripts/apply-ux-round3.py
+      - scripts/repair-ux-round3.py
       - .github/workflows/apply-ux-round3.yml
 
 permissions:
@@ -23,6 +24,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Preserve generated source escapes
+        run: python3 scripts/repair-ux-round3.py
       - name: Apply UX round 3
         run: python3 scripts/apply-ux-round3.py
       - name: Install dependencies
