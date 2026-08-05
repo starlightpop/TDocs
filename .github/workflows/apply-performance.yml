@@ -23,7 +23,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: node scripts/apply-performance.mjs
+      - name: Register only supported code languages
+        run: node scripts/apply-performance.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
