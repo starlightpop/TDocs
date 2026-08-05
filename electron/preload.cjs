@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('tdocs', {
   openFiles: () => ipcRenderer.invoke('open-files'),
   // 在独立本地进程中运行当前代码块，返回 stdout / stderr / exitCode。
   runCode: (payload) => ipcRenderer.invoke('run-code', payload),
+  readClipboardText: () => ipcRenderer.invoke('clipboard-read-text'),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 })

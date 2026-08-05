@@ -1,5 +1,5 @@
 // TDocs 桌面端主进程（Electron）
-const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog, clipboard } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const { runCode } = require('./code-runner.cjs')
@@ -67,11 +67,39 @@ function createWindow() {
     if (url.startsWith('http')) shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  // 使用系统原生编辑菜单，确保粘贴、匹配样式粘贴、拼写建议等行为与 macOS/Windows 一致。
+  win.webContents.on('context-menu', (_event, params) => {
+    const template = []
+    if (params.misspelledWord) {
+      for (const suggestion of (params.dictionarySuggestions || []).slice(0, 5)) {
+        template.push({ label: suggestion, click: () => win.webContents.replaceMisspelling(suggestion) })
+      }
+      if ((params.dictionarySuggestions || []).length) template.push({ type: 'separator' })
+      template.push({ label: '添加到词典', click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) })
+      template.push({ type: 'separator' })
+    }
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' },
+        { role: 'delete' }, { type: 'separator' }, { role: 'selectAll' },
+      )
+    } else if (params.selectionText) {
+      template.push({ role: 'copy' }, { type: 'separator' }, { role: 'selectAll' })
+    }
+    if (template.length) Menu.buildFromTemplate(template).popup({ window: win })
+  })
 }
 
 // ---------- IPC：拖出导出 + PDF ----------
 function registerIpc() {
   ipcMain.handle('run-code', async (_event, payload) => runCode(payload))
+  ipcMain.handle('clipboard-read-text', () => clipboard.readText())
+  ipcMain.handle('open-external', (_event, url) => {
+    if (typeof url === 'string' && /^https:\/\//i.test(url)) return shell.openExternal(url)
+    return false
+  })
 
   // 文件拖出窗口：写入临时 HTML 文件并交给系统拖拽
   ipcMain.handle('drag-export', async (event, { title, html }) => {

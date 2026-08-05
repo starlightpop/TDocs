@@ -7,6 +7,63 @@ const MAX_CODE_BYTES = 256 * 1024
 const MAX_OUTPUT_BYTES = 512 * 1024
 const DEFAULT_TIMEOUT = 8000
 
+const INSTALL_HELP = {
+  python: {
+    name: 'Python 3',
+    url: 'https://www.python.org/downloads/',
+    macCommand: '打开官方下载页安装 Python 3，完成后重新启动 TDocs。',
+    winCommand: '从 Python.org 安装，并勾选 Add Python to PATH。',
+    linuxCommand: '使用发行版包管理器安装 python3。',
+  },
+  c: {
+    name: 'C 编译工具链',
+    url: 'https://developer.apple.com/documentation/xcode/installing-the-command-line-tools',
+    macCommand: 'xcode-select --install',
+    winCommand: '安装 Visual Studio Build Tools 的“使用 C++ 的桌面开发”。',
+    linuxCommand: '使用发行版包管理器安装 clang 或 gcc。',
+  },
+  cpp: {
+    name: 'C++ 编译工具链',
+    url: 'https://developer.apple.com/documentation/xcode/installing-the-command-line-tools',
+    macCommand: 'xcode-select --install',
+    winCommand: '安装 Visual Studio Build Tools 的“使用 C++ 的桌面开发”。',
+    linuxCommand: '使用发行版包管理器安装 clang++ 或 g++。',
+  },
+  rust: {
+    name: 'Rust',
+    url: 'https://www.rust-lang.org/tools/install',
+    macCommand: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+    winCommand: '从 Rust 官方页面下载并运行 rustup-init.exe。',
+    linuxCommand: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+  },
+  java: {
+    name: 'Java JDK',
+    url: 'https://adoptium.net/temurin/releases/',
+    macCommand: '安装 JDK 后重新启动 TDocs，确认 javac 和 java 已加入 PATH。',
+    winCommand: '安装 JDK 后重新启动 TDocs，确认 javac 和 java 已加入 PATH。',
+    linuxCommand: '安装 JDK 17 或更高版本，并确认 javac 和 java 已加入 PATH。',
+  },
+  matlab: {
+    name: 'GNU Octave 或 MATLAB',
+    url: 'https://octave.org/download.html',
+    macCommand: '安装 GNU Octave 或 MATLAB，并确保 octave 或 matlab 命令可在终端运行。',
+    winCommand: '安装 GNU Octave 或 MATLAB，并确保 octave 或 matlab 命令可在终端运行。',
+    linuxCommand: '使用发行版包管理器安装 octave，或配置现有 MATLAB。',
+  },
+}
+
+function installHelp(language) {
+  const item = INSTALL_HELP[language]
+  if (!item) return null
+  const platformKey = process.platform === 'darwin' ? 'macCommand' : process.platform === 'win32' ? 'winCommand' : 'linuxCommand'
+  return {
+    title: `缺少 ${item.name} 运行环境`,
+    reason: `TDocs 为控制安装体积不会内置 ${item.name}。当前系统 PATH 中没有找到可用运行程序。`,
+    url: item.url,
+    command: item[platformKey],
+  }
+}
+
 function normalizeLanguage(value) {
   const key = String(value || 'plaintext').toLowerCase()
   const aliases = {
@@ -272,7 +329,9 @@ async function runCode(payload = {}) {
     }
 
     if (result.missing) {
-      result.stderr = `本机没有安装 ${language} 运行环境，或运行程序不在 PATH 中。`
+      const install = installHelp(language)
+      result.stderr = install ? `${install.reason}\n${install.command}` : `本机没有安装 ${language} 运行环境，或运行程序不在 PATH 中。`
+      result.install = install
     }
 
     return { language, ...result }
@@ -284,5 +343,6 @@ async function runCode(payload = {}) {
 module.exports = {
   inferLanguage,
   normalizeLanguage,
+  installHelp,
   runCode,
 }

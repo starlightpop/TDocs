@@ -68,6 +68,14 @@ export default function CodeTerminal({ run, onClose }) {
           <>
             {run.stdout ? <pre className="term-out">{run.stdout}</pre> : null}
             {run.stderr ? <pre className="term-out err">{run.stderr}</pre> : null}
+            {run.install && (
+              <div className="runtime-install-help">
+                <strong>{run.install.title}</strong>
+                <span>{run.install.reason}</span>
+                {run.install.command && <code>{run.install.command}</code>}
+                <button className="btn" onClick={() => window.tdocs?.openExternal?.(run.install.url)}>打开官方下载页面</button>
+              </div>
+            )}
             {!run.stdout && !run.stderr && run.ok ? <pre className="term-empty">程序运行完成，没有输出。</pre> : null}
           </>
         )}

@@ -21,23 +21,60 @@ import { PAPER_PRESETS as PAPER, normalizePaper, resolvePageSize, viewModeForPap
 import { saveVersionSnapshot } from './lib/versionHistory.js'
 
 const WELCOME_HTML = `
-<h1>欢迎使用 TDocs ✨</h1>
-<p>一个简洁、快速、支持<strong>深色模式</strong>的本地文档工具。</p>
-<h2>你可以做什么</h2>
+<h1>欢迎使用 TDocs</h1>
+<p>TDocs 0.2.0-preview 是一个本地优先的文档与 Word 双工作区编辑器。欢迎文件默认置顶，也可以删除。</p>
+<h2>文档工作区</h2>
 <ul>
-  <li>富文本排版：<strong>加粗</strong>、<em>斜体</em>、<u>下划线</u>、<s>删除线</s>、<mark data-color="#ffe58a" style="background-color:#ffe58a">高亮</mark></li>
-  <li>标题、列表、任务清单、引用、代码块</li>
-  <li>插入表格、图片、链接</li>
-  <li>一键切换深色 / 浅色模式 🌙</li>
+  <li>连续画布写作、标题大纲、查找替换、自动保存与本地版本历史</li>
+  <li>富文本格式、列表、任务清单、引用、表格、图片、链接与 Markdown 粘贴</li>
+  <li>浅色、深色及跟随系统主题，支持多档缩放</li>
 </ul>
-<h2>快捷键</h2>
+<h2>Word 工作区</h2>
+<ul>
+  <li>A4 / B5 固定纸张、页边距标尺、自动分页、页码和显式分页符</li>
+  <li>按 ⌘/Ctrl + Enter 插入分页符，也可以在页面底部点击“添加页面”</li>
+  <li>Word 文件与连续文档是独立文件类型，内容可通过复制粘贴迁移</li>
+</ul>
+<h2>代码块</h2>
+<ul>
+  <li>C、C++、Java、JavaScript、Python、Rust、MATLAB / Octave 语法高亮</li>
+  <li>连续行号、当前行高亮、前缀补全建议、块内运行按钮和可拖动运行结果</li>
+  <li>JavaScript 使用应用自带运行环境；其他语言使用电脑中已安装并加入 PATH 的运行环境</li>
+</ul>
+<h2>AI 改写</h2>
+<ul>
+  <li>选区保持高亮、润色、精简、扩写、正式化、口语化及自定义指令</li>
+  <li>模型按厂商独立配置，改写窗口只显示已经配置完成的厂商与模型</li>
+  <li>支持内联差异预览、接受和撤销</li>
+</ul>
+<h2>文件与输出</h2>
+<ul>
+  <li>文件夹、置顶、拖拽移动、内联重命名、本地文件导入</li>
+  <li>导出 PDF、DOCX、EPUB、Markdown、HTML 和纯文本</li>
+  <li>原生右键菜单支持撤销、重做、剪切、复制、粘贴、匹配样式粘贴、删除和全选</li>
+</ul>
+<h2>常用快捷键</h2>
 <table><tbody>
 <tr><th><p>操作</p></th><th><p>快捷键</p></th></tr>
-<tr><td><p>加粗</p></td><td><p>⌘ / Ctrl + B</p></td></tr>
-<tr><td><p>斜体</p></td><td><p>⌘ / Ctrl + I</p></td></tr>
-<tr><td><p>撤销 / 重做</p></td><td><p>⌘ / Ctrl + Z ⇧Z</p></td></tr>
+<tr><td><p>查找与替换</p></td><td><p>⌘ / Ctrl + F</p></td></tr>
+<tr><td><p>撤销 / 重做</p></td><td><p>⌘ / Ctrl + Z / Shift + Z</p></td></tr>
+<tr><td><p>插入分页符</p></td><td><p>⌘ / Ctrl + Enter（Word）</p></td></tr>
+<tr><td><p>代码补全</p></td><td><p>Tab</p></td></tr>
+<tr><td><p>退出代码块</p></td><td><p>空选区时 ⌘ / Ctrl + C，或点击代码块外</p></td></tr>
 </tbody></table>
-<blockquote><p>所有内容自动保存在浏览器本地，无需登录、无需联网。</p></blockquote>
+<hr>
+<h2>版本更新</h2>
+<h3>0.2.0-preview（当前版本）</h3>
+<ul>
+  <li>文档与 Word 工作区分离；新增 A4/B5、分页符与空白页保护</li>
+  <li>代码块改为独立交互，增加前缀补全、运行环境诊断与官方安装入口</li>
+  <li>新增中央设置中心、多厂商 AI 配置、模型识别修复、置顶文件和原生右键菜单</li>
+</ul>
+<h3>0.1.1-preview（上一个版本）</h3>
+<ul>
+  <li>加入基础分页、深色主题、AI 改写、代码运行、查找替换和版本历史</li>
+</ul>
+<blockquote><p>文档内容与配置默认保存在本机。AI 请求和外部下载只在你主动使用对应功能时发生。</p></blockquote>
 `
 
 export default function App() {
@@ -225,7 +262,9 @@ export default function App() {
   const [docs, setDocs] = useState(() => {
     const existing = loadDocs()
     if (existing.length) return existing
-    return [createDoc('欢迎使用 TDocs', WELCOME_HTML)]
+    const welcomeDoc = createDoc('欢迎使用 TDocs', WELCOME_HTML, { pinned: true, isWelcome: true })
+    saveDocs([welcomeDoc])
+    return [welcomeDoc]
   })
   const [activeId, setActiveId] = useState(() => {
     const id = loadActiveId()
@@ -415,8 +454,8 @@ export default function App() {
 
   // ---------- 操作 ----------
   const handleCreate = (kind = 'document', group = '') => {
-    const doc = createDoc('无标题文档', '', { kind, paper: 'a4' })
-    doc.group = group || activeDoc?.group || ''
+    const doc = createDoc(kind === 'word' ? '无标题 Word' : '无标题文档', '', { kind, paper: 'a4', group })
+    doc.group = group || ''
     persist([doc, ...docs])
     setActiveId(doc.id)
     setPaper(kind === 'word' ? 'a4' : 'wide')
@@ -501,7 +540,12 @@ export default function App() {
 
   // 文件重命名：直接原处内联编辑后提交
   const doRenameDoc = (doc, name) => {
-    persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || '无标题文档', updatedAt: Date.now() } : d)))
+    const fallback = doc.kind === 'word' ? '无标题 Word' : '无标题文档'
+    persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || fallback, updatedAt: Date.now() } : d)))
+  }
+
+  const handleTogglePin = (doc) => {
+    persist(docs.map((d) => (d.id === doc.id ? { ...d, pinned: !d.pinned, updatedAt: Date.now() } : d)))
   }
 
   // ---------- 分组操作 ----------
@@ -568,7 +612,7 @@ export default function App() {
       if (/\.(md|markdown)$/i.test(f.name)) content = renderMarkdown(f.content)
       else if (/\.(html?)$/i.test(f.name)) content = f.content
       else content = String(f.content).split(/\r?\n/).map((l) => `<p>${esc(l)}</p>`).join('')
-      return { ...createDoc(title, content, { kind: activeDoc?.kind || 'document', paper: activeDoc?.paper || 'a4' }), group: activeDoc?.group || '' }
+      return { ...createDoc(title, content, { kind: activeDoc?.kind || 'document', paper: activeDoc?.paper || 'a4' }), group: '' }
     })
     persist([...newDocs, ...docs])
     setActiveId(newDocs[0].id)
@@ -775,7 +819,7 @@ export default function App() {
         <input
           className="doc-title-input"
           value={activeDoc?.title || ''}
-          placeholder="无标题文档"
+          placeholder={activeDoc?.kind === 'word' ? '无标题 Word' : '无标题文档'}
           disabled={!activeDoc}
           onChange={(e) => handleTitleChange(e.target.value)}
         />
@@ -881,6 +925,7 @@ export default function App() {
           onDragExport={handleDragExport}
           onReorderGroups={handleReorderGroups}
           onOpenFiles={handleOpenFiles}
+          onTogglePin={handleTogglePin}
         />
 
         <main
@@ -898,7 +943,7 @@ export default function App() {
         >
           {activeDoc ? (
             <div className="main-col">
-              <Toolbar editor={editor} onAi={openAi} />
+              <Toolbar editor={editor} onAi={openAi} isWord={activeDoc.kind === 'word'} />
               {showFindReplace && (
                 <FindReplace editor={editor} onClose={() => setShowFindReplace(false)} />
               )}

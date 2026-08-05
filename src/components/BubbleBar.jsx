@@ -50,7 +50,9 @@ export default function BubbleBar({ editor, pos, onAi }) {
     }
   }
 
-  if (!editor || !pos) return null
+  const { $from, $to } = editor?.state?.selection || {}
+  const inCode = $from?.parent?.type?.name === 'codeBlock' || $to?.parent?.type?.name === 'codeBlock'
+  if (!editor || !pos || inCode) return null
 
   return (
     <div

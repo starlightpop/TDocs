@@ -60,7 +60,7 @@ function TB({ icon, title, active, disabled, onClick }) {
   )
 }
 
-export default function Toolbar({ editor, onAi }) {
+export default function Toolbar({ editor, onAi, isWord = false }) {
   const [showTextColor, setShowTextColor] = useState(false)
   const [showHighlight, setShowHighlight] = useState(false)
   const [showTableGrid, setShowTableGrid] = useState(false)
@@ -143,6 +143,7 @@ export default function Toolbar({ editor, onAi }) {
 
       <TB icon="undo" title="撤销 (⌘Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
       <TB icon="redo" title="重做 (⌘⇧Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
+      {isWord && <TB icon="page" title="插入分页符 (⌘/Ctrl+Enter)" onClick={() => editor.chain().focus().insertPageBreak().run()} />}
       <div className="divider" />
 
       {/* 段落样式：再次点击当前样式 → 恢复正文 */}

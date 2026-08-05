@@ -2,7 +2,7 @@
   "name": "tdocs",
   "productName": "TDocs",
   "private": true,
-  "version": "0.1.1-preview",
+  "version": "0.2.0-preview",
   "description": "TDocs — 类 Google Docs 的本地智能文档编辑器（深色模式 / 分页 / AI 改写）· Preview 预览版",
   "author": "twffsz",
   "main": "electron/main.cjs",

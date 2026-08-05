@@ -37,7 +37,7 @@ import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
 import CodeTerminal from './CodeTerminal.jsx'
 import { SearchHighlightExtension } from '../extensions/SearchHighlight.js'
-import { CODE_LANGUAGES, getCodeLanguageLabel, resolveCodeCompletion } from '../lib/codeLanguage.js'
+import { CODE_LANGUAGES, getCodeLanguageLabel, getCodeCompletionCandidates, resolveCodeCompletion } from '../lib/codeLanguage.js'
 
 // 将 HTML 内容转换并插入到编辑器指定位置
 function insertHtmlContent(view, html, pos) {
@@ -173,6 +173,25 @@ const Page = Node.create({
   },
 })
 
+
+// ---------- 显式分页符：Word 文件可通过 ⌘/Ctrl+Enter 或“添加页面”插入 ----------
+const PageBreak = Node.create({
+  name: 'pageBreak',
+  group: 'block',
+  atom: true,
+  selectable: false,
+  parseHTML: () => [{ tag: 'div[data-page-break]' }],
+  renderHTML: () => ['div', { 'data-page-break': 'true', class: 'manual-page-break', contenteditable: 'false' }, ['span', {}, '分页符']],
+  addCommands() {
+    return {
+      insertPageBreak: () => ({ commands }) => commands.insertContent([{ type: this.name }, { type: 'paragraph' }]),
+    }
+  },
+  addKeyboardShortcuts() {
+    return { 'Mod-Enter': () => this.editor.commands.insertPageBreak() }
+  },
+})
+
 // ---------- 代码块：语法高亮、连续行号、当前行高亮与块内运行 ----------
 const lowlight = createLowlight()
 lowlight.register('c', c)
@@ -229,6 +248,10 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         tr = tr.setSelection(TextSelection.create(tr.doc, cursor))
         view.dispatch(tr)
         return true
+      },
+      Escape: () => {
+        this.editor.view.dom.dispatchEvent(new CustomEvent('tdocs:hide-code-completions'))
+        return false
       },
       'Mod-c': () => {
         const { state, view } = this.editor
@@ -303,11 +326,15 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       const code = document.createElement('code')
       pre.append(gutter, code)
 
+      const completionMenu = document.createElement('div')
+      completionMenu.className = 'code-completion-menu'
+      completionMenu.hidden = true
+
       const footer = document.createElement('div')
       footer.className = 'code-block-footer'
       footer.contentEditable = 'false'
       footer.textContent = 'Tab 补全 · ⌘C / Ctrl+C 退出代码块'
-      shell.append(head, pre, footer)
+      shell.append(head, pre, footer, completionMenu)
 
       const syncActiveLine = () => {
         const spans = [...gutter.children]
@@ -324,6 +351,50 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         spans[lineIndex]?.classList.add('active')
       }
 
+
+
+      const applyCompletion = (candidate) => {
+        const { state } = view
+        const { empty, from } = state.selection
+        if (!empty || !candidate) return
+        const start = Math.max(0, from - candidate.replaceLength)
+        let tr = state.tr.insertText(candidate.insert, start, from)
+        const cursor = start + candidate.insert.length - (candidate.cursorBack || 0)
+        tr = tr.setSelection(TextSelection.create(tr.doc, cursor)).scrollIntoView()
+        view.dispatch(tr)
+        completionMenu.hidden = true
+      }
+
+      const renderCompletions = () => {
+        const pos = getPos()
+        const { state } = view
+        if (typeof pos !== 'number' || !state.selection.empty) { completionMenu.hidden = true; return }
+        const start = pos + 1
+        const end = start + node.content.size
+        if (state.selection.from < start || state.selection.from > end) { completionMenu.hidden = true; return }
+        const offset = Math.max(0, Math.min(node.content.size, state.selection.from - start))
+        const before = node.textBetween(0, offset, '\n', '\n')
+        const candidates = getCodeCompletionCandidates(node.attrs.language || 'plaintext', before)
+        if (!candidates.length) { completionMenu.hidden = true; return }
+        completionMenu.replaceChildren(...candidates.map((candidate, index) => {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = `code-completion-item${index === 0 ? ' active' : ''}`
+          const label = document.createElement('strong')
+          label.textContent = candidate.label
+          const detail = document.createElement('span')
+          detail.textContent = candidate.detail || ''
+          button.append(label, detail)
+          button.addEventListener('mousedown', (event) => { event.preventDefault(); applyCompletion(candidate) })
+          return button
+        }))
+        const caret = view.coordsAtPos(state.selection.from)
+        const rect = shell.getBoundingClientRect()
+        completionMenu.style.left = `${Math.max(44, Math.min(rect.width - 240, caret.left - rect.left))}px`
+        completionMenu.style.top = `${Math.max(40, caret.bottom - rect.top + 4)}px`
+        completionMenu.hidden = false
+      }
+
       const render = () => {
         const count = countCodeLines(node.textContent)
         const start = Math.max(1, Number(node.attrs.lineStart) || 1)
@@ -338,9 +409,12 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         shell.dataset.codeId = node.attrs.codeId || ''
         shell.classList.toggle('continued', Boolean(node.attrs.continued))
         syncActiveLine()
+        requestAnimationFrame(renderCompletions)
       }
-      const onSelection = () => syncActiveLine()
+      const onSelection = () => { syncActiveLine(); requestAnimationFrame(renderCompletions) }
+      const hideCompletions = () => { completionMenu.hidden = true }
       view.dom.addEventListener('tdocs:code-selection', onSelection)
+      view.dom.addEventListener('tdocs:hide-code-completions', hideCompletions)
       render()
       return {
         dom: shell,
@@ -352,7 +426,10 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
           return true
         },
         stopEvent: (event) => Boolean(event.target.closest?.('.code-block-head, .code-block-footer')),
-        destroy: () => view.dom.removeEventListener('tdocs:code-selection', onSelection),
+        destroy: () => {
+          view.dom.removeEventListener('tdocs:code-selection', onSelection)
+          view.dom.removeEventListener('tdocs:hide-code-completions', hideCompletions)
+        },
       }
     }
   },
@@ -491,6 +568,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       Superscript,
       Subscript,
       Page,
+      PageBreak,
       AiOldMark,
       AiNewMark,
       AiSelPlugin,
@@ -696,14 +774,28 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
 
   // ---------- 真分页（A4/B5）：每页独立 DOM、固定尺寸、溢出自动建新页 ----------
   // 结构转换：宽屏（doc>block）<-> 分页（doc>page>block）
+  const buildPagesFromBlocks = (state, blocks) => {
+    const pages = []
+    let current = []
+    const flush = () => {
+      pages.push(state.schema.nodes.page.create(null, current.length ? current : [state.schema.nodes.paragraph.create()]))
+      current = []
+    }
+    for (const block of blocks) {
+      current.push(block)
+      if (block.type.name === 'pageBreak') flush()
+    }
+    if (current.length || pages.length === 0) flush()
+    return pages
+  }
+
   const toPaged = (rebuild = false) => {
     if (!editor) return
     const { state, view } = editor
     if (!rebuild && state.doc.firstChild?.type.name === 'page') return
     const blocks = flattenBlocks(state)
-    const content = blocks.length ? blocks : [state.schema.nodes.paragraph.create()]
-    const pageNode = state.schema.nodes.page.create(null, content)
-    dispatchLayout(view, state.tr.replaceWith(0, state.doc.content.size, pageNode))
+    const pages = buildPagesFromBlocks(state, blocks)
+    dispatchLayout(view, state.tr.replaceWith(0, state.doc.content.size, pages))
   }
   const toWide = () => {
     if (!editor) return
@@ -826,6 +918,30 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     return true
   }
 
+
+  const enforceManualPageBreaks = (state, view) => {
+    let pagePos = 0
+    for (let pageIndex = 0; pageIndex < state.doc.childCount; pageIndex += 1) {
+      const page = state.doc.child(pageIndex)
+      if (page.type.name !== 'page') { pagePos += page.nodeSize; continue }
+      const children = []
+      page.forEach((child) => children.push(child))
+      const breakIndex = children.findIndex((child) => child.type.name === 'pageBreak')
+      if (breakIndex >= 0 && breakIndex < children.length - 1) {
+        const left = children.slice(0, breakIndex + 1)
+        const right = children.slice(breakIndex + 1)
+        const replacement = [
+          state.schema.nodes.page.create(page.attrs, left),
+          state.schema.nodes.page.create(null, right.length ? right : [state.schema.nodes.paragraph.create()]),
+        ]
+        dispatchLayout(view, state.tr.replaceWith(pagePos, pagePos + page.nodeSize, replacement))
+        return true
+      }
+      pagePos += page.nodeSize
+    }
+    return false
+  }
+
   // 删除内容后，后页内容应像 Word 一样自动向前回流。
   // 整块能放下时直接前移；文本块至少能容纳一行时先前移，再由溢出逻辑在行末拆开。
   const pullForward = (state, view) => {
@@ -837,6 +953,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     for (let index = 0; index < pages.length - 1; index += 1) {
       const current = pages[index]
       const next = pages[index + 1]
+      if (current.node.lastChild?.type.name === 'pageBreak') continue
       const currentDom = view.nodeDOM(current.pos)
       const currentPage = currentDom?.matches?.('[data-page]')
         ? currentDom
@@ -898,6 +1015,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   const reflow = () => {
     if (!editor || !paged) return false
     const { view, state } = editor
+    if (enforceManualPageBreaks(state, view)) return true
     if (normalizeCodeFragments(state, view)) return true
     let target = null
     state.doc.descendants((node, pos) => {
@@ -1082,32 +1200,43 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     }
   }, [paged, pageH, editor])
 
-  // 右键菜单项
+  // 浏览器开发模式使用自绘菜单；Electron 正式版使用系统原生编辑菜单。
   const buildCtxItems = () => {
     if (!editor) return []
     const chain = () => editor.chain().focus()
-    return [
+    const { $from, $to } = editor.state.selection
+    const inCode = $from.parent.type.name === 'codeBlock' || $to.parent.type.name === 'codeBlock'
+    const pasteText = async () => {
+      const text = await window.tdocs?.readClipboardText?.() ?? await navigator.clipboard.readText()
+      if (!text) return
+      const { state, view } = editor
+      view.dispatch(state.tr.insertText(text).scrollIntoView())
+    }
+    const selectAll = () => {
+      if (!inCode) { chain().selectAll().run(); return }
+      const { state, view } = editor
+      const depth = $from.depth
+      const start = $from.before(depth) + 1
+      const end = start + $from.parent.content.size
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, start, end)))
+    }
+    const base = [
       { label: '撤销', shortcut: '⌘Z', icon: <Icon name="undo" size={15} />, disabled: !editor.can().undo(), action: () => chain().undo().run() },
       { label: '重做', shortcut: '⌘⇧Z', icon: <Icon name="redo" size={15} />, disabled: !editor.can().redo(), action: () => chain().redo().run() },
       { sep: true },
-      { label: '剪切', icon: <Icon name="edit" size={15} />, action: () => document.execCommand('cut') },
-      { label: '复制', icon: <Icon name="doc" size={15} />, action: () => document.execCommand('copy') },
+      { label: '剪切', shortcut: '⌘X', icon: <Icon name="edit" size={15} />, action: () => document.execCommand('cut') },
+      { label: '复制', shortcut: '⌘C', icon: <Icon name="doc" size={15} />, action: () => document.execCommand('copy') },
+      { label: '粘贴', shortcut: '⌘V', icon: <Icon name="paste" size={15} />, action: pasteText },
+      { label: '全选', shortcut: '⌘A', icon: <Icon name="doc" size={15} />, action: selectAll },
+    ]
+    if (inCode) return base
+    return [
+      ...base,
       { sep: true },
       { label: '加粗', icon: <Icon name="bold" size={15} />, action: () => chain().toggleBold().run() },
       { label: '斜体', icon: <Icon name="italic" size={15} />, action: () => chain().toggleItalic().run() },
       { label: '高亮', icon: <Icon name="highlight" size={15} />, action: () => chain().toggleHighlight().run() },
-      { sep: true },
-      {
-        label: '插入链接', icon: <Icon name="link" size={15} />,
-        action: () => {
-          const url = window.prompt('输入链接地址', 'https://')
-          if (url && url !== 'https://') chain().extendMarkRange('link').setLink({ href: url }).run()
-        },
-      },
       { label: '清除格式', icon: <Icon name="eraser" size={15} />, action: () => chain().clearNodes().unsetAllMarks().run() },
-      { sep: true },
-      { label: '代码块', icon: <Icon name="codeBlock" size={15} />, action: () => chain().toggleCodeBlock().run() },
-      { label: '引用', icon: <Icon name="quote" size={15} />, action: () => chain().toggleBlockquote().run() },
       { sep: true },
       { label: 'AI 改写', icon: <Icon name="sparkle" size={15} />, action: () => onAi?.() },
     ]
@@ -1121,7 +1250,9 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     onSelection?.(len)
     onSelectionRange?.(from !== to ? { from, to } : null)
     editor.view.dom.dispatchEvent(new CustomEvent('tdocs:code-selection'))
-    if (from === to) { setBubblePos(null); return }
+    const { $from, $to } = editor.state.selection
+    const inCode = $from.parent.type.name === 'codeBlock' || $to.parent.type.name === 'codeBlock'
+    if (from === to || inCode) { setBubblePos(null); return }
     const sel = window.getSelection()
     if (!sel?.rangeCount) return
     const rect = sel.getRangeAt(0).getBoundingClientRect()
@@ -1154,6 +1285,7 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       onScroll={updateBubble}
       onContextMenu={(e) => {
         if (!editor) return
+        if (window.tdocs) return
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY })
       }}
@@ -1222,6 +1354,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           </div>
         )}
       </div>
+      {paged && (
+        <button className="add-word-page" onMouseDown={(event) => event.preventDefault()} onClick={() => editor?.chain().focus('end').insertPageBreak().run()}>
+          <Icon name="plus" size={14} />添加页面
+        </button>
+      )}
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={buildCtxItems()} onClose={() => setCtxMenu(null)} />
       )}

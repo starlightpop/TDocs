@@ -1,5 +1,6 @@
 // 浮动改写输入框：模型菜单仅展示已配置厂商。
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DOMSerializer } from '@tiptap/pm/model'
 import { Icon } from './Icons.jsx'
 import { loadApiConfig, listConfiguredApiConfigs, saveApiConfig, callLLM, cleanLLMOutput, sanitizeHtml } from '../lib/api.js'
@@ -143,13 +144,13 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
     window.addEventListener('mouseup', onUp)
   }
 
-  const style = {
-    top: pos.anchor === 'above' ? pos.top - 10 : pos.top + 10,
-    left: pos.left,
-    transform: pos.anchor === 'below' ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-  }
+  const width = Math.min(560, Math.max(320, window.innerWidth - 24))
+  const left = Math.max(12, Math.min(window.innerWidth - width - 12, pos.left - width / 2))
+  const requestedTop = pos.anchor === 'above' ? pos.top - 300 : pos.top + 10
+  const top = Math.max(12, Math.min(window.innerHeight - 220, requestedTop))
+  const style = { top, left, width, transform: 'none' }
 
-  return (
+  return createPortal(
     <div className="ai-prompt" style={style} ref={promptRef} onMouseDown={(event) => event.stopPropagation()}>
       <div className="ai-prompt-head" onMouseDown={onDragStart}>
         <span><Icon name="sparkle" size={13} />AI 改写{result ? ' · 结果' : ''}</span>
@@ -163,7 +164,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
               <div className="menu ai-model-menu" onClick={(event) => event.stopPropagation()}>
                 {configured.length ? configured.map((profile) => {
                   const item = getProvider(profile.provider)
-                  const models = item.models?.length ? item.models : [profile.model]
+                  const models = [profile.model]
                   return (
                     <div className="ai-model-group" key={profile.provider}>
                       <div className="settings-label">{item.name}</div>
@@ -236,6 +237,7 @@ export default function AiPrompt({ editor, selection, pos, onClose, onInlineDiff
           </div>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

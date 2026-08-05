@@ -16,9 +16,20 @@ function legacyKindFor(doc) {
   return oldPaper === 'a4' || oldPaper === 'b5' ? 'word' : 'document'
 }
 
+function looksLikeWelcome(doc) {
+  return Boolean(doc?.isWelcome || doc?.title === '欢迎使用 TDocs')
+}
+
 export function normalizeDoc(doc) {
   const kind = legacyKindFor(doc)
-  const normalized = { ...doc, kind }
+  const isWelcome = looksLikeWelcome(doc)
+  const normalized = {
+    ...doc,
+    kind,
+    pinned: isWelcome ? true : Boolean(doc?.pinned),
+    isWelcome,
+    group: isWelcome ? '' : (doc?.group || ''),
+  }
   if (kind === 'word') {
     const oldPaper = localStorage.getItem('inkdocs.paper')
     normalized.paper = doc?.paper === 'b5' || (!doc?.paper && oldPaper === 'b5') ? 'b5' : 'a4'
@@ -57,18 +68,25 @@ export function saveActiveId(id) {
   localStorage.setItem(ACTIVE_KEY, id || '')
 }
 
-export function createDoc(title = '无标题文档', content = '', options = {}) {
+export function createDoc(title = null, content = '', options = {}) {
   const now = Date.now()
   const kind = options.kind === 'word' ? 'word' : 'document'
+  const defaultTitle = kind === 'word' ? '无标题 Word' : '无标题文档'
   const doc = {
     id: uid(),
-    title,
+    title: title || defaultTitle,
     content,
     createdAt: now,
     updatedAt: now,
     autoTitle: true,
-    group: '',
+    group: options.group || '',
     kind,
+    pinned: Boolean(options.pinned),
+    isWelcome: Boolean(options.isWelcome),
+  }
+  if (doc.isWelcome) {
+    doc.pinned = true
+    doc.group = ''
   }
   if (kind === 'word') doc.paper = options.paper === 'b5' ? 'b5' : 'a4'
   return doc

@@ -8,7 +8,7 @@ export default function Sidebar({
   onSelect, onCreate, onRename, onDelete,
   onMoveDoc, onAddGroup, onRenameGroup, onDeleteGroup,
   onJumpHeading, treeOpen = true, editingGroupId, onCommitGroupName,
-  onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles,
+  onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles, onTogglePin,
 }) {
   const [query, setQuery] = useState('')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
@@ -44,7 +44,7 @@ export default function Sidebar({
     if (!searching) return true
     const q = query.toLowerCase()
     return d.title.toLowerCase().includes(q) || stripHtml(d.content).toLowerCase().includes(q)
-  })
+  }).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt)
 
   const toggleGroup = (gid) => {
     setCollapsedGroups((prev) => {
@@ -58,6 +58,7 @@ export default function Sidebar({
   const docMenuItems = (doc) => [
     { label: '打开', icon: <Icon name="doc" size={15} />, action: () => onSelect(doc.id) },
     { label: '重命名', icon: <Icon name="edit" size={15} />, action: () => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) } },
+    { label: doc.pinned ? '取消置顶' : '置顶', icon: <Icon name="pin" size={15} />, action: () => onTogglePin?.(doc) },
     { sep: true },
     // 移动到：子菜单列出所有文件夹；移出分组：仅已在分组内时显示
     {
@@ -79,7 +80,7 @@ export default function Sidebar({
   const renderDocItem = (doc) => (
     <div key={doc.id} className="doc-item-wrap">
       <div
-        className={`doc-item${doc.id === activeId ? ' active' : ''}`}
+        className={`doc-item${doc.id === activeId ? ' active' : ''}${doc.pinned ? ' pinned' : ''}`}
         onClick={() => { if (editingDocId === doc.id) return; onSelect(doc.id) }}
         onDoubleClick={() => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) }}
         draggable
@@ -126,7 +127,7 @@ export default function Sidebar({
             onBlur={() => { if (editingDocId === doc.id) { onRenameDoc?.(doc, docEditName); setEditingDocId(null) } }}
           />
         ) : (
-          <div className="doc-item-title">{doc.title || '无标题文档'}</div>
+          <div className="doc-item-title">{doc.pinned && <Icon name="pin" size={12} />}<span>{doc.title || (doc.kind === 'word' ? '无标题 Word' : '无标题文档')}</span></div>
         )}
         <div className="doc-item-meta">
           <span className={`doc-kind-badge ${doc.kind === 'word' ? 'word' : 'document'}`}>{doc.kind === 'word' ? `Word · ${(doc.paper || 'a4').toUpperCase()}` : '文档'}</span>
@@ -189,7 +190,7 @@ export default function Sidebar({
   )
 
   const renderGroupSection = (group) => {
-    const groupDocs = filtered.filter((d) => d.group === group.id)
+    const groupDocs = filtered.filter((d) => d.group === group.id && !d.pinned)
     const isCollapsed = collapsedGroups.has(group.id)
     const isEditing = editingGroupId === group.id
     const dragOver = dragOverGroupId === group.id
@@ -267,7 +268,8 @@ export default function Sidebar({
     )
   }
 
-  const ungroupedDocs = filtered.filter((d) => !d.group)
+  const pinnedDocs = filtered.filter((d) => d.pinned)
+  const ungroupedDocs = filtered.filter((d) => !d.group && !d.pinned)
 
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
@@ -312,6 +314,12 @@ export default function Sidebar({
           filtered.map(renderDocItem)
         ) : (
           <>
+            {pinnedDocs.length > 0 && (
+              <div className="group-section pinned-section">
+                <div className="pinned-section-label"><Icon name="pin" size={12} />置顶</div>
+                {pinnedDocs.map(renderDocItem)}
+              </div>
+            )}
             {groups.map(renderGroupSection)}
             {ungroupedDocs.length > 0 && (
               /* 未分组文档直接平铺，不再用“未分组”组头包裹 */
