@@ -1,0 +1,53 @@
+name: Apply Word page and runtime fixes
+
+on:
+  push:
+    branches:
+      - agent/tdocs-word-docs-foundation
+    paths:
+      - scripts/apply-word-pages-runtime.mjs
+      - .github/workflows/apply-word-pages-runtime.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tdocs-word-pages-runtime
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tdocs-word-docs-foundation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply page geometry and runtime fixes
+        run: node scripts/apply-word-pages-runtime.mjs
+      - name: Check Electron syntax
+        run: |
+          node --check electron/main.cjs
+          node --check electron/preload.cjs
+          node --check electron/code-runner.cjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm test
+      - name: Build renderer
+        run: npm run build
+      - name: Commit verified changes
+        run: |
+          git config user.name "TDocs Refactor Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src electron tests
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "fix: restore Word page geometry and real code execution"
+          git push origin HEAD:agent/tdocs-word-docs-foundation
