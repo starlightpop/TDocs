@@ -27,15 +27,18 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Repair generated runner template escaping
+      - name: Repair generated source template escaping
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path('scripts/apply-word-pages-runtime.mjs')
           text = path.read_text()
           text = text.replace("`run('${escaped}')`", "\"run('\" + escaped + \"')\"")
           text = text.replace("`当前版本没有配置 ${language} 的本地运行器。`", "'当前版本没有配置 ' + language + ' 的本地运行器。'")
           text = text.replace("`本机没有安装 ${language} 运行环境，或运行程序不在 PATH 中。`", "'本机没有安装 ' + language + ' 运行环境，或运行程序不在 PATH 中。'")
+          # 施工脚本中的模板主要用于生成 App/Editor/CSS 源码，禁止在施工阶段提前求值。
+          text = re.sub(r'(?<!\\)\$\{', r'\\${', text)
           path.write_text(text)
           PY
       - name: Apply page geometry and runtime fixes
