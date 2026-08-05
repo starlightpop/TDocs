@@ -3345,3 +3345,58 @@ html.platform-mac .topbar .menu {
   overflow-wrap: normal !important;
   word-break: normal !important;
 }
+
+
+/* 0.2.0-preview folder pin, content growth and code baseline repair */
+/* The document has one viewport of editable tail. Scrolling alone never grows it;
+   paragraphs, including empty paragraphs created with Enter, grow it naturally. */
+.main[data-workspace="document"] .document-page {
+  min-height: calc(var(--editor-viewport-height, 720px) + 720px) !important;
+  padding-bottom: calc(var(--editor-viewport-height, 720px) + 120px) !important;
+}
+
+/* Line numbers and source text share one immutable font metric and top inset. */
+.code-block-shell {
+  --code-font-size: 14px;
+  --code-line-height: 28px;
+  --code-pad-y: 14px;
+}
+.code-block-shell .code-gutter,
+.code-block-shell .code-scroll > pre,
+.code-block-shell .code-scroll > pre > .code-editable {
+  font-family: var(--font-mono) !important;
+  font-size: var(--code-font-size) !important;
+  line-height: var(--code-line-height) !important;
+  font-variant-ligatures: none;
+  font-synthesis: none;
+}
+.code-block-shell .code-gutter {
+  padding-top: var(--code-pad-y) !important;
+  padding-bottom: var(--code-pad-y) !important;
+}
+.code-block-shell .code-gutter > span {
+  display: block !important;
+  flex: 0 0 var(--code-line-height) !important;
+  width: 100%;
+  height: var(--code-line-height) !important;
+  min-height: var(--code-line-height) !important;
+  padding: 0 10px 0 4px !important;
+  line-height: var(--code-line-height) !important;
+  box-sizing: border-box;
+}
+.code-block-shell .code-scroll > pre > .code-editable {
+  padding-top: var(--code-pad-y) !important;
+  padding-bottom: var(--code-pad-y) !important;
+}
+
+.group-header.pinned {
+  color: var(--text);
+}
+.group-header.pinned > svg:first-of-type {
+  color: var(--accent);
+}
+.new-doc-button {
+  justify-content: center !important;
+  gap: 0 !important;
+  text-align: center;
+}

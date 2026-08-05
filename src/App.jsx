@@ -471,6 +471,12 @@ export default function App() {
     saveGroups(next)
   }
 
+  const handleToggleGroupPin = (group) => {
+    persistGroups(groups.map((item) => (
+      item.id === group.id ? { ...item, pinned: !item.pinned } : item
+    )))
+  }
+
   const handleAddGroup = () => {
     // 直接创建并进入内联重命名，不依赖浏览器 prompt
     let name = '新建文件夹'
@@ -827,6 +833,7 @@ export default function App() {
           onReorderGroups={handleReorderGroups}
           onOpenFiles={handleOpenFiles}
           onTogglePin={handleTogglePin}
+          onToggleGroupPin={handleToggleGroupPin}
         />
 
         <main

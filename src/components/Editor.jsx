@@ -420,7 +420,6 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   // 选中文字浮动条位置
   const [bubblePos, setBubblePos] = useState(null)
   const canvasRef = useRef(null)
-  const infiniteHeightRef = useRef(0)
 
   const extensions = useMemo(
     () => [
@@ -588,40 +587,15 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const page = wrapRef.current?.querySelector('.document-page')
     if (!canvas || !page) return undefined
 
-    const setHeight = (height) => {
-      const next = Math.ceil(height)
-      if (next <= infiniteHeightRef.current + 1) return
-      infiniteHeightRef.current = next
-      page.style.setProperty('--infinite-document-min-height', `${next}px`)
-    }
-
-    const ensureReserve = () => {
+    const updateViewportReserve = () => {
       const viewport = Math.max(480, canvas.clientHeight || 0)
-      const baseline = Math.max(4800, viewport * 5)
-      const inlineHeight = Number.parseFloat(page.style.getPropertyValue('--infinite-document-min-height')) || 0
-      const current = Math.max(infiniteHeightRef.current, inlineHeight, page.offsetHeight)
-
-      if (current < baseline) {
-        setHeight(baseline)
-        return
-      }
-
-      // Extend the document while its bottom is still well outside the viewport.
-      // The user never hits a visible page bottom, while real content keeps growing normally.
-      const remaining = canvas.scrollHeight - canvas.scrollTop - viewport
-      if (remaining < viewport * 1.75) {
-        setHeight(current + viewport * 3)
-      }
+      page.style.setProperty('--editor-viewport-height', `${Math.ceil(viewport)}px`)
     }
 
-    ensureReserve()
-    canvas.addEventListener('scroll', ensureReserve, { passive: true })
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(ensureReserve) : null
+    updateViewportReserve()
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(updateViewportReserve) : null
     observer?.observe(canvas)
-    return () => {
-      canvas.removeEventListener('scroll', ensureReserve)
-      observer?.disconnect()
-    }
+    return () => observer?.disconnect()
   }, [editor, doc?.id])
 
   // 选中文字统计：选区变化时上报选中字符数，并定位浮动条

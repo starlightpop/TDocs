@@ -8,7 +8,7 @@ export default function Sidebar({
   onSelect, onCreate, onRename, onDelete,
   onMoveDoc, onAddGroup, onRenameGroup, onDeleteGroup,
   onJumpHeading, treeOpen = true, editingGroupId, onCommitGroupName,
-  onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles, onTogglePin,
+  onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles, onTogglePin, onToggleGroupPin,
 }) {
   const [query, setQuery] = useState('')
   const [ctxMenu, setCtxMenu] = useState(null)
@@ -38,6 +38,10 @@ export default function Sidebar({
     const q = query.toLowerCase()
     return d.title.toLowerCase().includes(q) || stripHtml(d.content).toLowerCase().includes(q)
   }).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt)
+
+  const orderedGroups = [...groups].sort((a, b) => (
+    Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
+  ))
 
   const toggleGroup = (gid) => {
     setCollapsedGroups((prev) => {
@@ -182,6 +186,29 @@ export default function Sidebar({
     </div>
   )
 
+  const groupMenuItems = (group) => [
+    {
+      label: '新建文档',
+      icon: <Icon name="doc" size={15} />,
+      action: () => {
+        setCollapsedGroups((prev) => {
+          const next = new Set(prev)
+          next.delete(group.id)
+          return next
+        })
+        onCreate(group.id)
+      },
+    },
+    {
+      label: group.pinned ? '取消置顶' : '置顶',
+      icon: <Icon name="pin" size={15} />,
+      action: () => onToggleGroupPin?.(group),
+    },
+    { sep: true },
+    { label: '重命名文件夹', icon: <Icon name="edit" size={15} />, action: () => { setEditName(group.name); onRenameGroup(group) } },
+    { label: '删除文件夹', icon: <Icon name="trash" size={15} />, danger: true, action: () => onDeleteGroup(group) },
+  ]
+
   const renderGroupSection = (group) => {
     const groupDocs = filtered.filter((d) => d.group === group.id && !d.pinned)
     const isCollapsed = collapsedGroups.has(group.id)
@@ -190,7 +217,7 @@ export default function Sidebar({
     return (
       <div key={group.id} className="group-section">
         <div
-          className={`group-header${isCollapsed ? '' : ''}`}
+          className={`group-header${group.pinned ? ' pinned' : ''}`}
           onClick={() => !isEditing && toggleGroup(group.id)}
           onDoubleClick={() => { setEditName(group.name); onRenameGroup(group) }}
           draggable={!isEditing}
@@ -211,16 +238,14 @@ export default function Sidebar({
             setCtxMenu({
               x: e.clientX,
               y: e.clientY,
-              items: [
-                { label: '重命名文件夹', icon: <Icon name="edit" size={15} />, action: () => { setEditName(group.name); onRenameGroup(group) } },
-                { label: '删除文件夹', icon: <Icon name="trash" size={15} />, danger: true, action: () => onDeleteGroup(group) },
-              ],
+              items: groupMenuItems(group),
             })
           }}
         >
           <span className={`group-caret${isCollapsed ? ' collapsed' : ''}`}>
             <Icon name="chevronDown" size={12} />
           </span>
+          {group.pinned && <Icon name="pin" size={11} />}
           <Icon name="folder" size={13} />
           {isEditing ? (
             <input
@@ -267,7 +292,7 @@ export default function Sidebar({
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
-        <button className="btn btn-primary new-doc-button" onClick={() => onCreate('')}><Icon name="plus" size={15} />新建文档</button>
+        <button className="btn btn-primary new-doc-button" onClick={() => onCreate('')}>新建文档</button>
         <div className="sidebar-search-row">
           <div className="search-box">
             <span className="search-icon"><Icon name="search" size={15} /></span>
@@ -300,7 +325,7 @@ export default function Sidebar({
                 {pinnedDocs.map(renderDocItem)}
               </div>
             )}
-            {groups.map(renderGroupSection)}
+            {orderedGroups.map(renderGroupSection)}
             {ungroupedDocs.length > 0 && (
               /* 未分组文档直接平铺，不再用“未分组”组头包裹 */
               <div

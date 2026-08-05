@@ -36,22 +36,32 @@ export function saveTheme(theme) {
   localStorage.setItem(THEME_KEY, theme)
 }
 
+function normalizeGroup(group = {}) {
+  return {
+    ...group,
+    id: group.id || `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: group.name || '新建文件夹',
+    collapsed: Boolean(group.collapsed),
+    pinned: Boolean(group.pinned),
+  }
+}
+
 export function loadGroups() {
   try {
     const raw = localStorage.getItem(GROUPS_KEY)
     const value = raw ? JSON.parse(raw) : []
-    return Array.isArray(value) ? value : []
+    return Array.isArray(value) ? value.map(normalizeGroup) : []
   } catch {
     return []
   }
 }
 
 export function saveGroups(groups) {
-  localStorage.setItem(GROUPS_KEY, JSON.stringify(groups || []))
+  localStorage.setItem(GROUPS_KEY, JSON.stringify((groups || []).map(normalizeGroup)))
 }
 
 export function createGroup(name = '新建文件夹') {
-  return { id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, collapsed: false }
+  return normalizeGroup({ id: `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, collapsed: false, pinned: false })
 }
 
 export function normalizeDoc(doc = {}) {

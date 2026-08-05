@@ -6,24 +6,23 @@ const editor = readFileSync(new URL('../src/components/Editor.jsx', import.meta.
 const css = readFileSync(new URL('../src/app.css', import.meta.url), 'utf8')
 const headings = readFileSync(new URL('../src/lib/headings.js', import.meta.url), 'utf8')
 
-test('code block keeps native newline behavior and a valid two-column DOM', () => {
-  assert.match(editor, /\.\.\.this\.parent\?\.\(\)/)
-  assert.doesNotMatch(editor, /pre\.append\(gutter, code\)/)
-  assert.match(editor, /body\.append\(gutter, scroller\)/)
-  assert.match(editor, /ignoreMutation: \(mutation\) => !code\.contains\(mutation\.target\)/)
-  assert.match(css, /position: static !important;[\s\S]*grid-column: 1 !important/)
-  assert.match(css, /grid-column: 2 !important/)
+test('code line numbers and source share exact line metrics', () => {
+  assert.match(css, /--code-line-height: 28px/)
+  assert.match(css, /--code-pad-y: 14px/)
+  assert.match(css, /\.code-gutter,[\s\S]*\.code-editable[\s\S]*font-size: var\(--code-font-size\) !important/)
+  assert.match(css, /flex: 0 0 var\(--code-line-height\) !important/)
 })
 
-test('bounded document extends before its bottom enters the viewport', () => {
-  assert.match(editor, /remaining < viewport \* 1\.75/)
-  assert.match(editor, /setHeight\(current \+ viewport \* 3\)/)
-  assert.match(css, /--infinite-document-min-height/)
-  assert.match(css, /max\(4800px, calc\(100vh \* 5\)\)/)
+test('document height is driven by content and viewport resize, never scrolling', () => {
+  assert.match(editor, /const updateViewportReserve = \(\) =>/)
+  assert.match(editor, /ResizeObserver\(updateViewportReserve\)/)
+  assert.doesNotMatch(editor, /addEventListener\('scroll', ensureReserve/)
+  assert.doesNotMatch(editor, /setHeight\(current \+ viewport \* 3\)/)
+  assert.match(css, /padding-bottom: calc\(var\(--editor-viewport-height, 720px\) \+ 120px\)/)
 })
 
-test('heading navigation reserves a full tail and aligns the heading to canvas top', () => {
+test('heading navigation uses existing content tail without mutating page height', () => {
   assert.match(headings, /canvas\.scrollTo\(\{ top: targetTop, behavior: 'smooth' \}\)/)
-  assert.match(headings, /canvas\.clientHeight \* 2\.25/)
-  assert.doesNotMatch(headings, /chain\(\)\.focus\(\)\.setTextSelection/)
+  assert.doesNotMatch(headings, /--infinite-document-min-height/)
+  assert.doesNotMatch(headings, /requiredHeight/)
 })
