@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('tdocs', {
   // 在独立本地进程中运行当前代码块，返回 stdout / stderr / exitCode。
   runCode: (payload) => ipcRenderer.invoke('run-code', payload),
   readClipboardText: () => ipcRenderer.invoke('clipboard-read-text'),
+  readClipboardHTML: () => ipcRenderer.invoke('clipboard-read-html'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   toggleMaximize: () => ipcRenderer.invoke('toggle-maximize'),
 })

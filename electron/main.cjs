@@ -128,6 +128,7 @@ function createWindow() {
 function registerIpc() {
   ipcMain.handle('run-code', async (_event, payload) => runCode(payload))
   ipcMain.handle('clipboard-read-text', () => clipboard.readText())
+  ipcMain.handle('clipboard-read-html', () => clipboard.readHTML())
   ipcMain.handle('toggle-maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return false

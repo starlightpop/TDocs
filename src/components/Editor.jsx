@@ -58,6 +58,25 @@ function insertMarkdownText(view, text, pos) {
 const escapeHtmlText = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
+// 粘贴内容统一判断链：Cmd+V（handlePaste 原生事件）与右键菜单共用同一套识别逻辑。
+// Markdown 优先 → 多行纯文本按段落 → 其余返回 false（由调用方决定原生处理或兜底插入）。
+function applyPasteData(view, { text = '', html = '' } = {}) {
+  if (text && shouldPreferMarkdownPaste(text, html)) {
+    insertMarkdownText(view, text, null)
+    return true
+  }
+  if (!html && text?.includes('\n')) {
+    const paras = text
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((l) => `<p>${escapeHtmlText(l) || '<br>'}</p>`)
+      .join('')
+    insertHtmlContent(view, paras, null)
+    return true
+  }
+  return false
+}
+
 const isMdFile = (file) => /\.(md|markdown|mdown)$/i.test(file?.name || '')
 
 // ---------- 字号 + 字体：基于 TextStyle 扩展两个属性，避免重复注册同名 mark ----------
@@ -531,23 +550,11 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
           reader.readAsText(file)
           return true
         }
-        // 剪贴板常同时带 text/plain 与 text/html；明确的 Markdown 应优先解析。
+        // 剪贴板常同时带 text/plain 与 text/html；与右键粘贴共用同一判断链
         const text = event.clipboardData?.getData('text/plain')
         const html = event.clipboardData?.getData('text/html')
-        if (text && shouldPreferMarkdownPaste(text, html)) {
+        if (applyPasteData(view, { text, html })) {
           event.preventDefault()
-          insertMarkdownText(view, text, null)
-          return true
-        }
-        // 普通多行纯文本仍按段落插入，不影响真正的富文本粘贴。
-        if (!html && text?.includes('\n')) {
-          event.preventDefault()
-          const paras = text
-            .replace(/\r/g, '')
-            .split('\n')
-            .map((l) => `<p>${escapeHtmlText(l) || '<br>'}</p>`)
-            .join('')
-          insertHtmlContent(view, paras, null)
           return true
         }
         return false
@@ -716,9 +723,25 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const inCode = $from.parent.type.name === 'codeBlock' || $to.parent.type.name === 'codeBlock'
     const pasteText = async () => {
       const text = await window.tdocs?.readClipboardText?.() ?? await navigator.clipboard.readText()
-      if (!text) return
+      const html = await window.tdocs?.readClipboardHTML?.() ?? ''
+      if (!text && !html) return
       const { state, view } = editor
-      view.dispatch(state.tr.insertText(text).scrollIntoView())
+      // 代码块内粘贴一律纯文本（不解析 Markdown/HTML）
+      if (inCode) {
+        view.dispatch(state.tr.insertText(text).scrollIntoView())
+        return
+      }
+      // 与 Cmd+V 同一套判断链：Markdown → 多行分段 → 富文本 HTML → 纯文本兜底
+      if (applyPasteData(view, { text, html })) return
+      if (html) {
+        const frag = document.createRange().createContextualFragment(html)
+        const parsed = PMDOMParser.fromSchema(view.state.schema).parse(frag)
+        if (parsed && parsed.content.size > 0) {
+          view.dispatch(state.tr.replaceSelection(parsed).scrollIntoView())
+          return
+        }
+      }
+      if (text) view.dispatch(state.tr.insertText(text).scrollIntoView())
     }
     const selectAll = () => {
       if (!inCode) { chain().selectAll().run(); return }
