@@ -398,6 +398,29 @@ export default function App() {
   // 大纲点击跳转后的滚动抑制，避免高亮被滚回上一个标题
   const jumpSuppressRef = useRef(0)
 
+  // 保存全部文档（防抖由调用点控制，这里只负责异步写入）。
+  // 必须在“拿到 IDB 返回”之后再 setSaveState，避免假保存。
+  // 必须提前声明：多个 useCallback 在闭包里引用它，提前定义可避免 TDZ。
+  const persist = useCallback(async (next) => {
+    setDocs(next)
+    setSaveState('saving')
+    const result = await tryWriteDocs(next)
+    if (result.ok) {
+      setSaveState('saved')
+      return result
+    }
+    setSaveState('failed')
+    return result
+  }, [])
+
+  // 重试最后一次失败：重新走一次 IDB 写入
+  const retryPersist = useCallback(() => {
+    setDocs((current) => {
+      persist(current)
+      return current
+    })
+  }, [persist])
+
   const activeDoc = useMemo(() => docs.find((d) => d.id === activeId) || null, [docs, activeId])
 
   // ---------- 崩溃恢复操作 ----------
@@ -625,25 +648,10 @@ export default function App() {
 
   // 保存全部文档（防抖由调用点控制，这里只负责异步写入）。
   // 必须在“拿到 IDB 返回”之后再 setSaveState，避免假保存。
-  const persist = useCallback(async (next) => {
-    setDocs(next)
-    setSaveState('saving')
-    const result = await tryWriteDocs(next)
-    if (result.ok) {
-      setSaveState('saved')
-      return result
-    }
-    setSaveState('failed')
-    return result
-  }, [])
+  // 已上移到 jumpSuppressRef 之后，避免 TDZ。
 
   // 重试最后一次失败：重新走一次 IDB 写入
-  const retryPersist = useCallback(() => {
-    setDocs((current) => {
-      persist(current)
-      return current
-    })
-  }, [persist])
+  // 已上移到 jumpSuppressRef 之后，避免 TDZ。
 
   // ---------- 操作 ----------
   const handleCreate = (group = '') => {
@@ -1091,14 +1099,21 @@ export default function App() {
           disabled={!activeDoc}
           onChange={(e) => handleTitleChange(e.target.value)}
         />
+        {/* 中间留可拖动空白区，保证 macOS 双击最大化与窗口拖拽 */}
+        <div className="topbar-spacer" />
         <div className="topbar-right">
           <span className={`save-status save-status-${saveState}${saveState === 'saving' ? ' saving' : ''}`}>
             <span className="dot" />
             {saveState === 'saving' ? '保存中…' : saveState === 'failed' ? '保存失败' : '已保存'}
           </span>
           {saveState === 'failed' && (
-            <button className="save-status-retry" onClick={retryPersist} title="重新写入 IndexedDB">
-              点击重试
+            <button
+              className="icon-btn save-retry-btn"
+              onClick={retryPersist}
+              title="重新写入 IndexedDB"
+              aria-label="重试保存"
+            >
+              <Icon name="retry" />
             </button>
           )}
           <button
@@ -1116,7 +1131,7 @@ export default function App() {
             <Icon name="undo" />
           </button>
 
-          <span className="workspace-mode-badge"><Icon name="doc" size={13} />文档</span>
+          <span className="workspace-mode-badge" />
 
           {/* 设置统一使用中央分类窗口。 */}
           <button className={`icon-btn${showSettings ? ' active' : ''}`} data-tip="设置" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(true) }}>

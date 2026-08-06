@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Icon } from './Icons.jsx'
 import { formatTime } from '../lib/storage.js'
 import { loadVersions, removeVersion, saveVersionSnapshot } from '../lib/versionHistory.js'
@@ -11,18 +11,29 @@ function previewHtml(html) {
 export default function VersionHistory({ doc, onRestore, onClose }) {
   const [versions, setVersions] = useState([])
 
-  const refresh = () => setVersions(loadVersions(doc?.id))
+  // IDB 迁移后 loadVersions / saveVersionSnapshot / removeVersion 都返回 Promise，
+  // 之前是同步读取，直接 setVersions(Promise) 会导致 versions.map 崩溃。
+  const refresh = useCallback(async () => {
+    if (!doc?.id) {
+      setVersions([])
+      return
+    }
+    const list = await loadVersions(doc.id)
+    setVersions(Array.isArray(list) ? list : [])
+  }, [doc?.id])
 
   useEffect(() => {
     refresh()
-  }, [doc?.id])
+  }, [refresh])
 
-  const saveCurrent = () => {
-    setVersions(saveVersionSnapshot(doc, { label: '手动保存', force: true }))
+  const saveCurrent = async () => {
+    const list = await saveVersionSnapshot(doc, { label: '手动保存', force: true })
+    setVersions(Array.isArray(list) ? list : [])
   }
 
-  const remove = (versionId) => {
-    setVersions(removeVersion(doc.id, versionId))
+  const remove = async (versionId) => {
+    const list = await removeVersion(doc.id, versionId)
+    setVersions(Array.isArray(list) ? list : [])
   }
 
   return (

@@ -62,8 +62,8 @@ html.platform-mac .topbar .menu {
 }
 
 .doc-title-input {
-  flex: 1 1 auto;  /* 随文字弹性伸缩 */
-  max-width: 340px;  /* 约 20 个中文字符，超出截断不显示 */
+  flex: 0 1 280px;  /* 小窗口：收缩到 280；中/大窗口：被 spacer 控住不再扩张 */
+  max-width: 320px;
   min-width: 96px;
   margin-left: 8px;
   font-size: 16px;
@@ -79,6 +79,26 @@ html.platform-mac .topbar .menu {
   white-space: nowrap;
   transition: border-color 0.15s, background 0.15s;
 }
+
+/* 顶栏中间留可拖动空白区，保证双击最大化与窗口拖拽 */
+.topbar-spacer {
+  flex: 1 1 auto;
+  min-width: 24px;
+}
+
+/* 保存失败时重试图标：与背景融合，红色描边表示状态 */
+.save-retry-btn {
+  color: var(--text-2);
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.save-retry-btn:hover {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+.save-status-failed + .save-retry-btn {
+  color: #c2410c;
+}
 .doc-title-input:hover {
   border-color: var(--border);
 }
@@ -88,7 +108,6 @@ html.platform-mac .topbar .menu {
 }
 
 .topbar-right {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1329,37 +1348,40 @@ html.platform-mac .topbar .menu {
   font-weight: 700;
 }
 
-/* 拖拽跟手卡片（替换默认拖影） */
+/* 拖拽跟手卡片（替换默认拖影）。
+   注意：Chromium/Electron 在 setDragImage 后会拍快照并渲染，
+   为了避免“圆角被截图截成直角”，所有装饰元素都用纯色、避免透明叠加。 */
 .drag-ghost {
   position: fixed;
   left: -9999px;
   top: -9999px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px 7px 8px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  font-size: 12.5px;
-  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
   pointer-events: none;
-  opacity: 0.92;
+  /* 截图前隐形避免闪烁 */
+  transform: translateZ(0);
 }
 .drag-ghost-icon {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .drag-ghost-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 .drag-ghost-label {
-  max-width: 180px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* 拖拽目标高亮：脉冲边框 + 底色 */

@@ -134,6 +134,12 @@ export const Icons = {
   doc: (
     <svg viewBox="0 0 24 24" {...p}><path d="M6 2h8l5 5v15H6z" /><path d="M14 2v5h5M9 12h7M9 16h7" /></svg>
   ),
+  retry: (
+    <svg viewBox="0 0 24 24" {...p}><path d="M3 12a9 9 0 0 1 15.4-6.4M21 4v5h-5" /><path d="M21 12a9 9 0 0 1-15.4 6.4M3 20v-5h5" /></svg>
+  ),
+  alert: (
+    <svg viewBox="0 0 24 24" {...p}><path d="M12 3 2 21h20z" /><path d="M12 9v5" /><circle cx="12" cy="17.5" r="0.9" fill="currentColor" stroke="none" /></svg>
+  ),
 }
 
 export function Icon({ name, size = 18, style }) {

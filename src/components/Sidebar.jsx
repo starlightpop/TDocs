@@ -22,6 +22,25 @@ export default function Sidebar({
   const [editingDocId, setEditingDocId] = useState(null)
   const [docEditName, setDocEditName] = useState('')
 
+  // 统一生成拖拽跟手卡片。
+  // 图标和文本只用必要信息，避免 Chromium 截图时出现“巨卡片 / 直角边”问题。
+  const DRAG_GHOST_SVG_DOC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>'
+  const DRAG_GHOST_SVG_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'
+  const buildDragGhost = (label, kind) => {
+    const ghost = document.createElement('div')
+    ghost.className = 'drag-ghost'
+    const icon = document.createElement('span')
+    icon.className = 'drag-ghost-icon'
+    icon.innerHTML = kind === 'folder' ? DRAG_GHOST_SVG_FOLDER : DRAG_GHOST_SVG_DOC
+    const text = document.createElement('span')
+    text.className = 'drag-ghost-label'
+    text.textContent = label || '未命名'
+    ghost.appendChild(icon)
+    ghost.appendChild(text)
+    document.body.appendChild(ghost)
+    return ghost
+  }
+
 
   // 进入内联编辑时初始化名称（新建或重命名文件夹）
   useEffect(() => {
@@ -83,18 +102,10 @@ export default function Sidebar({
         draggable
         onDragStart={(e) => {
           // 自定义拖拽跟手卡片，替换默认拖影
-          const ghost = document.createElement('div')
-          ghost.className = 'drag-ghost'
-          const icon = document.createElement('span')
-          icon.className = 'drag-ghost-icon'
-          icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5M9 12h7M9 16h7"/></svg>'
-          const label = document.createElement('span')
-          label.className = 'drag-ghost-label'
-          label.textContent = doc.title || '无标题文档'
-          ghost.appendChild(icon)
-          ghost.appendChild(label)
-          document.body.appendChild(ghost)
-          e.dataTransfer.setDragImage(ghost, 20, 20)
+          const ghost = buildDragGhost(doc.title || '无标题文档', 'doc')
+          try {
+            e.dataTransfer.setDragImage(ghost, 16, 16)
+          } catch { /* 一些 Chromium 版本对隐形节点抛错，兑底为默认拖影 */ }
           e.dataTransfer.setData('text/tdocs-doc', doc.id)
           e.dataTransfer.effectAllowed = 'copyMove'
           setTimeout(() => ghost.remove(), 0)
@@ -222,8 +233,13 @@ export default function Sidebar({
           onDoubleClick={() => { setEditName(group.name); onRenameGroup(group) }}
           draggable={!isEditing}
           onDragStart={(e) => {
+            const ghost = buildDragGhost(group.name, 'folder')
+            try {
+              e.dataTransfer.setDragImage(ghost, 16, 16)
+            } catch { /* 兑底为默认拖影 */ }
             e.dataTransfer.setData('text/tdocs-group', group.id)
             e.dataTransfer.effectAllowed = 'move'
+            setTimeout(() => ghost.remove(), 0)
           }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
