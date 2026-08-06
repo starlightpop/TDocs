@@ -125,6 +125,9 @@ export const Icons = {
   pin: (
     <svg viewBox="0 0 24 24" {...p}><path d="m9 3 6 2-1 5 4 4-5 1-3 6-1-7-4-3 5-2z" /></svg>
   ),
+  checkBoxMulti: (
+    <svg viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="3" width="8" height="8" rx="1" /><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /><path d="m14.5 17 1.5 1.5 3-3" /></svg>
+  ),
   page: (
     <svg viewBox="0 0 24 24" {...p}><rect x="5" y="2.5" width="14" height="19" rx="1.5" /><path d="M8 7h8M8 11h8M8 15h6" /></svg>
   ),

@@ -8,16 +8,20 @@ import SettingsDialog from './components/SettingsDialog.jsx'
 import AiPrompt from './components/AiPrompt.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import VersionHistory from './components/VersionHistory.jsx'
+import QuickSwitcher from './components/QuickSwitcher.jsx'
 import { Icon } from './components/Icons.jsx'
 import {
-  loadDocs, saveDocs, loadActiveId, saveActiveId, createDoc,
-  loadTheme, saveTheme, stripHtml,
-  loadGroups, saveGroups, createGroup,
+  loadDocs, loadActiveId, saveActiveId, createDoc,
+  loadTheme, saveTheme, stripHtml, classifyDocSize, estimateDocSize, formatTime,
+  loadGroups, saveGroups, createGroup, bootstrapStorage, tryWriteDocs, getDoc,
 } from './lib/storage.js'
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
 import { renderMarkdown } from './lib/markdown.js'
 import { saveVersionSnapshot } from './lib/versionHistory.js'
+import { storage as idbStorage } from './lib/idb.js'
+import { buildRecoveryItems } from './lib/recovery.js'
+import { resolveTdocsImages, renderImageTag, compressImageFile } from './lib/imageCompress.js'
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs</h1>
@@ -73,6 +77,57 @@ const WELCOME_HTML = `
 `
 
 const WELCOME_SEED_KEY = 'inkdocs.welcomeSeed.0.2.0-document-preview'
+
+// 把恢复快照标准化后插入 docs 列表（同步）
+function normalizeDocImported(doc) {
+  const now = Date.now()
+  return {
+    id: doc.id,
+    title: doc.title || '无标题文档',
+    content: doc.content || '',
+    kind: 'document',
+    group: '',
+    pinned: false,
+    isWelcome: false,
+    autoTitle: false,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+// ---------- 崩溃恢复面板 ----------
+function RecoveryPanel({ items, onRestore, onDismiss, onDismissAll, onClose }) {
+  if (!items?.length) return null
+  return (
+    <div className="modal-mask recovery-mask" onClick={onClose}>
+      <div className="modal recovery-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>恢复未保存的内容？</h3>
+        <p className="recovery-tip">
+          检测到 {items.length} 份最近未保存的文档快照（默认保留 7 天）。可以选择恢复到现有文档，也可以忽略。
+        </p>
+        <div className="recovery-list">
+          {items.map((item) => (
+            <div key={item.id} className="recovery-item">
+              <div className="recovery-item-head">
+                <strong className="recovery-title">{item.title || '未命名文档'}</strong>
+                <span className="recovery-time">{formatTime(item.savedAt)}</span>
+              </div>
+              <div className="recovery-preview">{item.preview}</div>
+              <div className="recovery-actions">
+                <button className="btn btn-primary" onClick={() => onRestore(item)}>恢复</button>
+                <button className="btn" onClick={() => onDismiss(item)}>忽略</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onDismissAll}>全部忽略</button>
+          <button className="btn" onClick={onClose}>以后再看</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   // ---------- 主题：支持 跟随系统 / 浅色 / 深色 ----------
@@ -230,14 +285,14 @@ export default function App() {
       }
       const next = [welcomeDoc, ...existing.filter((_doc, index) => index !== welcomeIndex)]
       localStorage.setItem(WELCOME_SEED_KEY, '1')
-      saveDocs(next)
-      return next
+      tryWriteDocs(next).catch(() => {})
+      return next.map((doc) => ({ ...doc, content: doc.id === welcomeDoc.id ? doc.content : '' }))
     }
     if (localStorage.getItem(WELCOME_SEED_KEY) !== '1') {
       const welcomeDoc = createDoc('欢迎使用 TDocs', WELCOME_HTML, { pinned: true, isWelcome: true })
       const next = [welcomeDoc, ...existing]
       localStorage.setItem(WELCOME_SEED_KEY, '1')
-      saveDocs(next)
+      tryWriteDocs(next).catch(() => {})
       return next
     }
     return existing
@@ -246,7 +301,7 @@ export default function App() {
     const id = loadActiveId()
     return id || loadDocs()[0]?.id || null
   })
-  const [saveState, setSaveState] = useState('saved') // saved | saving
+  const [saveState, setSaveState] = useState('saved') // saved | saving | failed
   const [stats, setStats] = useState({ words: 0, chars: 0 })
   const [selectedChars, setSelectedChars] = useState(0)
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false)
@@ -255,8 +310,10 @@ export default function App() {
   const [showOutline, setShowOutline] = useState(false)
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showVersionHistory, setShowVersionHistory] = useState(false)
+  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
+  const editorRef = useRef(null)
   const zoomAnchorRef = useRef(null)
   const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
@@ -272,6 +329,57 @@ export default function App() {
   // 侧边栏标题树展开状态（点击已打开的文档可收起）
   const [treeOpen, setTreeOpen] = useState(true)
 
+  // ---------- IDB bootstrap + 崩溃恢复 ----------
+  const [recoveryItems, setRecoveryItems] = useState([])
+  const [recoveryPanelOpen, setRecoveryPanelOpen] = useState(false)
+  const [recoveryResolved, setRecoveryResolved] = useState(false)
+  const lastRecoveryVersionRef = useRef(0)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        await bootstrapStorage()
+        const ids = (await idbStorage().getAllDocs()).map((d) => d.id)
+        if (cancelled) return
+        // 异步回流 docs：把 IDB 里真实 content 填回去
+        const s = idbStorage()
+        const loaded = []
+        for (const id of ids) {
+          const doc = await s.getDoc(id)
+          if (doc) loaded.push(doc)
+        }
+        if (loaded.length) {
+          loaded.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+          setDocs((prev) => {
+            const map = new Map(loaded.map((d) => [d.id, d]))
+            const next = prev.map((d) => (map.has(d.id) ? { ...map.get(d.id) } : d))
+            // 确保欢迎文件始终在最前
+            const welcome = next.find((d) => d.isWelcome)
+            if (welcome) {
+              const rest = next.filter((d) => d.id !== welcome.id)
+              return [welcome, ...rest]
+            }
+            return next
+          })
+        }
+        const recs = await s.listRecoveries()
+        if (cancelled) return
+        const items = buildRecoveryItems(recs)
+        if (items.length && !recoveryResolved) {
+          setRecoveryItems(items)
+          setRecoveryPanelOpen(true)
+        }
+      } catch (err) {
+        // 静默失败，老数据仍可用
+        // eslint-disable-next-line no-console
+        console.warn('TDocs 启动时无法同步 IndexedDB', err)
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ---------- 字号缩放（⌘/Ctrl + 滚轮） ----------
   const [zoom, setZoom] = useState(() => Number(localStorage.getItem('inkdocs.zoom')) || 1)
   const previousZoomRef = useRef(zoom)
@@ -285,6 +393,147 @@ export default function App() {
   const jumpSuppressRef = useRef(0)
 
   const activeDoc = useMemo(() => docs.find((d) => d.id === activeId) || null, [docs, activeId])
+
+  // ---------- 崩溃恢复操作 ----------
+  const handleRecoveryRestore = useCallback(async (item) => {
+    if (!item) return
+    const idb = idbStorage()
+    if (!idb.isUsable) return
+    const s = idbStorage()
+    const incoming = {
+      id: item.id,
+      title: item.title,
+      content: item.content,
+      updatedAt: Date.now(),
+    }
+    // 看 docs 里是否已经存在；存在则用恢复内容覆盖
+    const existing = await s.getDoc(item.id)
+    let next
+    if (existing) {
+      next = docs.map((d) => (d.id === item.id ? { ...d, ...incoming } : d))
+    } else {
+      next = [normalizeDocImported(incoming), ...docs]
+    }
+    await persist(next)
+    setActiveId(item.id)
+    setEditor(null)
+    setHeadings([])
+    await idb.deleteRecovery(item.id)
+    setRecoveryItems((list) => list.filter((r) => r.id !== item.id))
+  }, [docs, persist])
+
+  const handleRecoveryDismiss = useCallback(async (item) => {
+    if (!item) return
+    const idb = idbStorage()
+    if (idb.isUsable) await idb.deleteRecovery(item.id)
+    setRecoveryItems((list) => list.filter((r) => r.id !== item.id))
+  }, [])
+
+  const handleRecoveryDismissAll = useCallback(async () => {
+    const idb = idbStorage()
+    if (idb.isUsable) {
+      for (const item of recoveryItems) {
+        await idb.deleteRecovery(item.id)
+      }
+    }
+    setRecoveryItems([])
+    setRecoveryResolved(true)
+    setRecoveryPanelOpen(false)
+  }, [recoveryItems])
+
+  // ---------- 文档体积等级 / 图片压缩 ----------
+  const sizeLevel = useMemo(() => {
+    if (!activeDoc) return 'ok'
+    return classifyDocSize(activeDoc.content || '')
+  }, [activeDoc])
+  const sizeBytes = useMemo(() => {
+    if (!activeDoc) return 0
+    return estimateDocSize(activeDoc.content || '')
+  }, [activeDoc])
+  const sizeLabel = useMemo(() => {
+    if (!sizeBytes) return ''
+    if (sizeBytes >= 1024 * 1024) return `${(sizeBytes / 1024 / 1024).toFixed(2)} MB`
+    if (sizeBytes >= 1024) return `${(sizeBytes / 1024).toFixed(0)} KB`
+    return `${sizeBytes} B`
+  }, [sizeBytes])
+  const [compressingImages, setCompressingImages] = useState(false)
+  const [compressProgress, setCompressProgress] = useState(0)
+  const [compressResult, setCompressResult] = useState(null)
+
+  const compressDocImages = useCallback(async () => {
+    if (!activeDoc || compressingImages) return
+    setCompressingImages(true)
+    setCompressResult(null)
+    setCompressProgress(0)
+    try {
+      // 先把 data-tdocs-img 全部在内存里 resolve：先拉所有图片 id
+      const s = idbStorage()
+      if (!s.isUsable) {
+        setCompressingImages(false)
+        setCompressResult({ error: '当前环境未启用 IndexedDB' })
+        return
+      }
+      // 扫描正文中的 data-tdocs-img / tdocs://img/xxx
+      const ids = new Set()
+      const html = activeDoc.content || ''
+      const reData = /data-tdocs-img="([^"]+)"/g
+      let m
+      while ((m = reData.exec(html))) ids.add(m[1])
+      const reSrc = /tdocs:\/\/img\/([^"'\s>]+)/g
+      while ((m = reSrc.exec(html))) ids.add(m[1])
+      const idList = Array.from(ids).filter(Boolean)
+      if (!idList.length) {
+        setCompressingImages(false)
+        setCompressResult({ message: '未发现需要压缩的图片' })
+        return
+      }
+      // 拉原图
+      const originals = []
+      for (const id of idList) {
+        const img = await s.getImage(id)
+        if (!img) continue
+        originals.push({ id, mimeType: img.type, size: img.blob?.size || img.size || 0, blob: img.blob })
+      }
+      // 找出 >200KB 且还未被 WebP 处理过的
+      const targets = originals.filter((i) => i.size > 200 * 1024 && i.mimeType !== 'image/webp')
+      if (!targets.length) {
+        setCompressingImages(false)
+        setCompressResult({ message: '所有图片都已压缩' })
+        return
+      }
+      let processed = 0
+      let savedBytes = 0
+      let newHtml = html
+      for (const target of targets) {
+        try {
+          const result = await compressImageFile(target.blob, { mimeType: 'image/webp' })
+          await s.setImage({ id: target.id, blob: result.blob, type: result.type, size: result.size })
+          // 替换正文里的 src 为 webp 协议标记，data-tdocs-img 保持不变
+          newHtml = newHtml
+            .replace(new RegExp(`tdocs://img/${target.id}`, 'g'), `tdocs://img/${target.id}?fmt=webp`)
+          savedBytes += Math.max(0, (target.size || 0) - result.size)
+        } catch (err) {
+          // 单个图片失败不影响其他
+          // eslint-disable-next-line no-console
+          console.warn('压缩图片失败', target.id, err)
+        }
+        processed += 1
+        setCompressProgress(Math.round((processed / targets.length) * 100))
+      }
+      if (newHtml !== html) {
+        const updated = { ...activeDoc, content: newHtml, updatedAt: Date.now() }
+        persist(docs.map((d) => (d.id === activeDoc.id ? updated : d)))
+        editor?.commands?.setContent?.(newHtml, false)
+      }
+      setCompressResult({
+        message: savedBytes > 0 ? `已压缩 ${targets.length} 张图片，节省 ${(savedBytes / 1024).toFixed(0)} KB` : `处理了 ${targets.length} 张图片`,
+      })
+    } catch (err) {
+      setCompressResult({ error: `压缩失败：${err?.message || err}` })
+    } finally {
+      setCompressingImages(false)
+    }
+  }, [activeDoc, docs, editor, persist, compressingImages])
 
   const handleTitlebarDoubleClick = (event) => {
     if (event.target.closest?.('button, input, select, textarea, a, [data-no-drag]')) return
@@ -342,6 +591,10 @@ export default function App() {
         event.preventDefault()
         setShowFindReplace(true)
       }
+      if ((event.metaKey || event.ctrlKey) && (event.key.toLowerCase() === 'p' || event.key.toLowerCase() === 'k')) {
+        event.preventDefault()
+        setShowQuickSwitcher(true)
+      }
       if (event.key === 'Escape') setShowFindReplace(false)
     }
     window.addEventListener('keydown', onKeyDown)
@@ -364,13 +617,27 @@ export default function App() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // 保存全部文档（防抖由调用点控制，这里直接写）
-  const persist = useCallback((next) => {
+  // 保存全部文档（防抖由调用点控制，这里只负责异步写入）。
+  // 必须在“拿到 IDB 返回”之后再 setSaveState，避免假保存。
+  const persist = useCallback(async (next) => {
     setDocs(next)
     setSaveState('saving')
-    saveDocs(next)
-    setTimeout(() => setSaveState('saved'), 400)
+    const result = await tryWriteDocs(next)
+    if (result.ok) {
+      setSaveState('saved')
+      return result
+    }
+    setSaveState('failed')
+    return result
   }, [])
+
+  // 重试最后一次失败：重新走一次 IDB 写入
+  const retryPersist = useCallback(() => {
+    setDocs((current) => {
+      persist(current)
+      return current
+    })
+  }, [persist])
 
   // ---------- 操作 ----------
   const handleCreate = (group = '') => {
@@ -380,11 +647,25 @@ export default function App() {
     setActiveId(doc.id)
     setEditor(null)
     setHeadings([])
+    // 为未保存内容做 recovery 占位；真实写入启动后会被覆盖
+    if (idbStorage().isUsable) {
+      idbStorage().setRecovery({ id: doc.id, title: doc.title, content: '', savedAt: Date.now() }).catch(() => {})
+    }
   }
 
   const handleSelect = (id) => {
     if (id !== activeId && activeDoc) {
-      saveVersionSnapshot(activeDoc, { label: '切换前版本' })
+      const snapshot = {
+        id: activeDoc.id,
+        title: activeDoc.title,
+        content: activeDoc.content,
+        savedAt: Date.now(),
+      }
+      // 先保存当前文档内容为恢复快照（避免丢失未点保存就切换的修改）
+      if (idbStorage().isUsable && (activeDoc.content || activeDoc.title)) {
+        idbStorage().setRecovery(snapshot).catch(() => {})
+      }
+      saveVersionSnapshot(activeDoc, { label: '切换前版本' }).catch(() => {})
     }
     if (id === activeId) {
       // 再次点击当前文档：展开/收起标题树
@@ -395,27 +676,45 @@ export default function App() {
     setEditor(null)
     setHeadings([])
     setTreeOpen(true)
+    // 刷新“最近修改的快照”面板（如果用户手动重新检查）
+    lastRecoveryVersionRef.current += 1
   }
 
   const handleContentChange = useCallback(
     (html) => {
+      setSaveState('saving')
       setDocs((prev) => {
         const now = Date.now()
+        let changedDoc = null
         const next = prev.map((d) => {
           if (d.id !== activeId) return d
           const updated = { ...d, content: html, updatedAt: now }
-          const lastCheckpoint = versionCheckpointRef.current.get(d.id) || 0
-          if (now - lastCheckpoint >= 5 * 60 * 1000) {
-            saveVersionSnapshot(updated, { label: '自动版本' })
-            versionCheckpointRef.current.set(d.id, now)
-          }
+          changedDoc = updated
           return updated
         })
-        saveDocs(next)
+        const lastCheckpoint = versionCheckpointRef.current.get(activeId) || 0
+        if (changedDoc && now - lastCheckpoint >= 5 * 60 * 1000) {
+          versionCheckpointRef.current.set(activeId, now)
+          // 不在 state updater 内才发起；另开一个 microtask
+          Promise.resolve().then(() => {
+            saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
+          })
+        }
+        // 立刻写 recovery（防止在 saveDocs 没机会成功前出现崩溃/退出）
+        if (changedDoc && idbStorage().isUsable) {
+          idbStorage().setRecovery({
+            id: changedDoc.id,
+            title: changedDoc.title,
+            content: html,
+            savedAt: now,
+          }).catch(() => {})
+        }
+        // 真正的 IDB 写入用 tryWriteDocs（串行化 + 返回 ok/quota 状态）
+        tryWriteDocs(next).then((res) => {
+          setSaveState(res.ok ? 'saved' : 'failed')
+        }).catch(() => setSaveState('failed'))
         return next
       })
-      setSaveState('saving')
-      setTimeout(() => setSaveState('saved'), 350)
     },
     [activeId],
   )
@@ -449,6 +748,10 @@ export default function App() {
         if (activeId === doc.id) {
           setActiveId(next[0]?.id || null)
           setEditor(null)
+        }
+        if (idbStorage().isUsable) {
+          idbStorage().deleteRecovery(doc.id).catch(() => {})
+          idbStorage().deleteDoc(doc.id).catch(() => {})
         }
         setModal(null)
       },
@@ -572,6 +875,7 @@ export default function App() {
   }
 
   // ---------- AI ----------
+  // 打开 AI 改写面板。e 可为事件（来自顶栏/工具栏按钮）或 preset 字符串（来自 / 命令面板）。
   const openAi = (e) => {
     if (!editor) return
     const { from, to } = editor.state.selection
@@ -595,7 +899,43 @@ export default function App() {
       const r = btn?.getBoundingClientRect?.() || { bottom: 90, left: window.innerWidth / 2, width: 0 }
       pos = { top: r.bottom, left: r.left + (r.width || 0) / 2, anchor: 'below' }
     }
-    setAiPrompt({ editor, selection, pos })
+    setAiPrompt({ editor, selection, pos, preset: typeof e === 'string' ? e : '' })
+  }
+
+  // 多选区批量 AI 改写入口：来自 BubbleBar；ranges 是 DOM range 列表。
+  // 把每个 range 转成 PM 选区，存到 aiPrompt 里，AiPrompt 自行处理流式 + SPLIT 拆分。
+  const openMultiAi = (ranges) => {
+    if (!editor || !Array.isArray(ranges) || ranges.length < 2) {
+      openAi()
+      return
+    }
+    // 计算 pos：取第一个 range 的坐标
+    const first = ranges[0]
+    const rect = first.getBoundingClientRect()
+    const pos = { top: rect.top, left: rect.left + rect.width / 2, anchor: rect.top > 320 ? 'above' : 'below' }
+    const multiRanges = ranges.map((range) => {
+      const from = editor.view.posAtCoords({ left: range.getBoundingClientRect().left + 1, top: range.getBoundingClientRect().top + 1 })
+      // 兜底：posAtCoords 失败时尝试用 Range API 找节点
+      let start = from?.pos
+      let end = start
+      try {
+        if (start == null) {
+          const node = range.startContainer
+          if (node?.nodeType === 1) {
+            start = editor.view.posAtDOM(node, range.startOffset) ?? editor.state.selection.from
+            end = editor.view.posAtDOM(node, range.endOffset) ?? start
+          }
+        } else {
+          end = editor.view.posAtCoords({ left: range.getBoundingClientRect().right - 1, top: range.getBoundingClientRect().bottom - 1 })?.pos
+          if (end == null || end < start) end = start + (range.toString?.().length || 0)
+        }
+      } catch { /* ignore */ }
+      if (typeof start !== 'number') start = editor.state.selection.from
+      if (typeof end !== 'number' || end <= start) end = editor.state.selection.to
+      return { from: start, to: end }
+    }).filter((r) => r.from < r.to)
+    if (!multiRanges.length) { openAi(); return }
+    setAiPrompt({ editor, selection: null, pos, multiRanges })
   }
 
   // 选中改写结果：在文档内呈现内联 diff（原文划线 + 新内容高亮），供接受/撤销
@@ -745,10 +1085,15 @@ export default function App() {
           onChange={(e) => handleTitleChange(e.target.value)}
         />
         <div className="topbar-right">
-          <span className={`save-status${saveState === 'saving' ? ' saving' : ''}`}>
+          <span className={`save-status save-status-${saveState}${saveState === 'saving' ? ' saving' : ''}`}>
             <span className="dot" />
-            {saveState === 'saving' ? '保存中…' : '已保存'}
+            {saveState === 'saving' ? '保存中…' : saveState === 'failed' ? '保存失败' : '已保存'}
           </span>
+          {saveState === 'failed' && (
+            <button className="save-status-retry" onClick={retryPersist} title="重新写入 IndexedDB">
+              点击重试
+            </button>
+          )}
           <button
             className={`icon-btn${showFindReplace ? ' active' : ''}`}
             data-tip="查找和替换（⌘/Ctrl+F）"
@@ -776,6 +1121,13 @@ export default function App() {
           {/* 大纲面板开关（状态栏已有同功能入口，顶栏不再重复） */}
 
 
+          <button
+            className="icon-btn"
+            data-tip="快速跳转（⌘/Ctrl + P / K）"
+            onClick={() => setShowQuickSwitcher(true)}
+          >
+            <Icon name="search" size={16} />
+          </button>
           {activeDoc && (
             <div className="menu-wrap">
               <button className="btn" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowExportMenu(!showExportMenu) }}>
@@ -855,18 +1207,47 @@ export default function App() {
                 onChange={handleContentChange}
                 onStats={setStats}
                 onHeadings={setHeadings}
-                onReady={setEditor}
+                onReady={(ed) => { editorRef.current = ed; setEditor(ed) }}
                 onAi={openAi}
+                onMultiAi={openMultiAi}
                 onSelection={setSelectedChars}
                 onSelectionRange={(range) => { lastSelectionRef.current = range }}
                 aiSelection={aiPrompt?.selection || null}
                 aiInline={aiInline}
                 onResolveInline={() => setAiInline(null)}
+                onOpenFind={() => setShowFindReplace(true)}
+                onOpenHistory={() => setShowVersionHistory(true)}
+                onOpenExport={() => setShowExportMenu(true)}
               />
               <div className="statusbar">
                 <span>{stats.words} 词</span>
                 <span>{stats.chars} 字符</span>
                 {selectedChars > 0 && <span className="statusbar-selected">已选 {selectedChars} 字符</span>}
+                {sizeLevel === 'warn' && (
+                  <span className="statusbar-chip statusbar-chip-warn" title="当前文档超过 200KB，考虑压缩图片或拆分">
+                    文档偏大 · {sizeLabel}
+                  </span>
+                )}
+                {sizeLevel === 'danger' && (
+                  <>
+                    <span className="statusbar-chip statusbar-chip-danger" title="文档超过 500KB，建议拆分或导出为独立文件">
+                      文档超过 500KB · {sizeLabel}
+                    </span>
+                    <button
+                      className="statusbar-chip statusbar-chip-action"
+                      disabled={compressingImages}
+                      onClick={compressDocImages}
+                      title="扫描当前文档中的大图并压缩到 WebP"
+                    >
+                      {compressingImages ? `压缩中 ${compressProgress}%` : '压缩图片'}
+                    </button>
+                  </>
+                )}
+                {compressResult && (
+                  <span className={`statusbar-chip ${compressResult.error ? 'statusbar-chip-warn' : 'statusbar-chip-info'}`}>
+                    {compressResult.error || compressResult.message}
+                  </span>
+                )}
                 <div className="right">
                   <div className="menu-wrap zoom-wrap" ref={zoomAnchorRef}>
                     <button
@@ -930,6 +1311,8 @@ export default function App() {
               editor={aiPrompt.editor}
               selection={aiPrompt.selection}
               pos={aiPrompt.pos}
+              preset={aiPrompt.preset}
+              multiRanges={aiPrompt.multiRanges || null}
               onClose={() => setAiPrompt(null)}
               onInlineDiff={handleInlineDiff}
             />
@@ -948,6 +1331,30 @@ export default function App() {
         </main>
       </div>
 
+      {showQuickSwitcher && (
+        <QuickSwitcher
+          docs={docs}
+          onClose={() => setShowQuickSwitcher(false)}
+          onPick={(doc, contentPos) => {
+            setActiveId(doc.id)
+            setEditor(null)
+            setHeadings([])
+            setShowQuickSwitcher(false)
+            // 编辑器 onReady 之后再设选区
+            if (contentPos) {
+              setTimeout(() => {
+                try {
+                  const ed = editorRef.current
+                  if (ed && ed.state.doc.textContent.length >= contentPos) {
+                    ed.chain().focus().setTextSelection(contentPos).run()
+                  }
+                } catch { /* 选区定位失败不影响主流程 */ }
+              }, 60)
+            }
+          }}
+        />
+      )}
+
       {showSettings && (
         <SettingsDialog
           onClose={() => setShowSettings(false)}
@@ -960,6 +1367,23 @@ export default function App() {
           darkKey={darkKey}
           setLightKey={setLightKey}
           setDarkKey={setDarkKey}
+        />
+      )}
+
+      {/* 崩溃恢复面板 */}
+      {recoveryPanelOpen && recoveryItems.length > 0 && (
+        <RecoveryPanel
+          items={recoveryItems}
+          onRestore={async (item) => {
+            await handleRecoveryRestore(item)
+          }}
+          onDismiss={async (item) => {
+            await handleRecoveryDismiss(item)
+          }}
+          onDismissAll={async () => {
+            await handleRecoveryDismissAll()
+          }}
+          onClose={() => setRecoveryPanelOpen(false)}
         />
       )}
 

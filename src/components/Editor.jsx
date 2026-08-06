@@ -31,11 +31,15 @@ import TaskItem from '@tiptap/extension-task-item'
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import { looksLikeMarkdown, renderMarkdown, shouldPreferMarkdownPaste } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
+import { storage as idbStorage } from '../lib/idb.js'
+import { compressImageFile, renderImageTag, makeImageId, shouldCompress, resolveTdocsImages } from '../lib/imageCompress.js'
 import ContextMenu from './ContextMenu.jsx'
 import BubbleBar from './BubbleBar.jsx'
 import { Icon } from './Icons.jsx'
 import CodeTerminal from './CodeTerminal.jsx'
 import { SearchHighlightExtension } from '../extensions/SearchHighlight.js'
+import SlashMenu from './SlashMenu.jsx'
+import { isValidTriggerContext } from '../lib/slashCommands.js'
 import { CODE_LANGUAGES, getCodeLanguageLabel, getCodeCompletionCandidates, resolveCodeCompletion } from '../lib/codeLanguage.js'
 
 // 将 HTML 内容转换并插入到编辑器指定位置
@@ -430,7 +434,7 @@ function AiAcceptCard({ editor, diff, onResolve }) {
   )
 }
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, onMultiAi, onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline, onOpenFind, onOpenHistory, onOpenExport }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [terminalRun, setTerminalRun] = useState(null)
@@ -438,6 +442,8 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
   // 选中文字浮动条位置
   const [bubblePos, setBubblePos] = useState(null)
   const canvasRef = useRef(null)
+  // / 命令面板状态
+  const [slashMenu, setSlashMenu] = useState(null) // {triggerPos, coords, query}
 
   const extensions = useMemo(
     () => [
@@ -486,14 +492,20 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
         const coords = { left: event.clientX, top: event.clientY }
         if (file.type.startsWith('image/')) {
           event.preventDefault()
-          const reader = new FileReader()
-          reader.onload = () => {
+          insertImageWithStorage(file).then((id) => {
+            if (!id) return
             const { from } = view.posAtCoords(coords) || {}
             if (from != null) {
-              view.dispatch(view.state.tr.insert(from, view.state.schema.nodes.image.create({ src: reader.result })))
+              const html = renderImageTag(id, file.name)
+              const tmp = document.createElement('div')
+              tmp.innerHTML = html
+              const dom = tmp.firstElementChild
+              if (dom && view.state.schema.nodes.image) {
+                const src = `tdocs://img/${id}`
+                view.dispatch(view.state.tr.insert(from, view.state.schema.nodes.image.create({ src, alt: file.name })))
+              }
             }
-          }
-          reader.readAsDataURL(file)
+          }).catch(() => {})
           return true
         }
         // 拖入 Markdown 文件自动转换
@@ -639,6 +651,47 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     editor.view.dispatch(editor.state.tr.setMeta(aiSelKey, decos))
   }, [aiSelection, editor])
 
+  // / 命令面板：检测 `/` 输入，更新 trigger 位置 + query + 浮层位置
+  useEffect(() => {
+    if (!editor) return undefined
+    const onTransaction = () => {
+      const { state } = editor
+      const { from } = state.selection
+      if (from === state.selection.to) {
+        // 空选区：尝试匹配光标前最近的 `/`
+        const lookback = Math.min(40, from)
+        const text = state.doc.textBetween(Math.max(0, from - lookback), from, '\n', '\n')
+        const slashIdx = text.lastIndexOf('/')
+        if (slashIdx >= 0) {
+          const triggerPos = from - (text.length - slashIdx)
+          const after = text.slice(slashIdx + 1)
+          // 触发字符后不能包含空白或换行
+          if (!/[\s\n]/.test(after)) {
+            const { $from } = state.selection
+            const inCode = $from.parent.type.name === 'codeBlock'
+            const valid = isValidTriggerContext({
+              beforeText: text.slice(0, slashIdx),
+              inCodeBlock: inCode,
+              hasSelection: false,
+            })
+            if (valid) {
+              try {
+                const coords = editor.view.coordsAtPos(from)
+                setSlashMenu({ triggerPos, query: after, coords: { top: coords.top, bottom: coords.bottom, left: coords.left } })
+                return
+              } catch { /* 坐标解析失败不弹 */ }
+            }
+          }
+        }
+      }
+      setSlashMenu(null)
+    }
+    editor.on('transaction', onTransaction)
+    return () => {
+      editor.off('transaction', onTransaction)
+    }
+  }, [editor])
+
   // 编辑器统一使用中文自绘菜单；普通输入框由 Electron 提供中文原生菜单。
   const buildCtxItems = () => {
     if (!editor) return []
@@ -728,9 +781,23 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       }}
     >
       <CodeTerminal run={terminalRun} onClose={() => setTerminalRun(null)} />
-      <BubbleBar editor={editor} pos={bubblePos} onAi={onAi} />
+      <BubbleBar editor={editor} pos={bubblePos} onAi={onAi} onMultiAi={onMultiAi} />
       {/* AI 内联 diff 接受卡片 */}
       {aiInline && <AiAcceptCard editor={editor} diff={aiInline} onResolve={onResolveInline} />}
+      {/* / 命令面板 */}
+      {slashMenu && (
+        <SlashMenu
+          editor={editor}
+          triggerPos={slashMenu.triggerPos}
+          coords={slashMenu.coords}
+          query={slashMenu.query}
+          onClose={() => setSlashMenu(null)}
+          onAi={onAi}
+          onOpenFind={onOpenFind}
+          onOpenHistory={onOpenHistory}
+          onOpenExport={onOpenExport}
+        />
+      )}
       <div className="page-wrap" ref={wrapRef}>
         <EditorContent editor={editor} className="page document-page" />
           </div>

@@ -1,6 +1,8 @@
 // 选中文字后的浮动格式工具条（飞书式：自定位浮动条，内部下拉悬停展开，箭头旋转）
-import { useRef, useState } from 'react'
+// 多选区批量改写：用户 ⌘/Ctrl + 多选 → 触发 onMultiAi，回传多个 range 给上层。
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icons.jsx'
+import { getMultiSelectionRanges, clearMultiSelection, beginMultiSelection, captureMultiRange } from '../lib/multiSelection.js'
 
 const TEXT_COLORS = [
   '#1c1e21', '#6b7280', '#9aa2b1', '#e5484d', '#f2814a', '#e0a428',
@@ -19,8 +21,10 @@ const BLOCK_ITEMS = [
   ['h4', '标题 4'], ['h5', '标题 5'], ['h6', '标题 6'],
 ]
 
-export default function BubbleBar({ editor, pos, onAi }) {
+export default function BubbleBar({ editor, pos, onAi, onMultiAi }) {
   const [hoverMenu, setHoverMenu] = useState(null) // 'block' | 'color' | 'align'
+  const [multiOn, setMultiOn] = useState(false)
+  const [multiCount, setMultiCount] = useState(0)
   const closeTimer = useRef(null)
 
   const hoverOpen = (name) => {
@@ -49,6 +53,16 @@ export default function BubbleBar({ editor, pos, onAi }) {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
     }
   }
+
+  // 监听多选区开关状态 → 按钮高亮 + 计数器
+  useEffect(() => {
+    if (!multiOn) { setMultiCount(0); return undefined }
+    const tick = () => setMultiCount(getMultiSelectionRanges().filter((r) => !r.collapsed).length)
+    tick()
+    const id = setInterval(tick, 250)
+    document.addEventListener('selectionchange', tick)
+    return () => { clearInterval(id); document.removeEventListener('selectionchange', tick) }
+  }, [multiOn])
 
   const { $from, $to } = editor?.state?.selection || {}
   const inCode = $from?.parent?.type?.name === 'codeBlock' || $to?.parent?.type?.name === 'codeBlock'
@@ -170,11 +184,50 @@ export default function BubbleBar({ editor, pos, onAi }) {
         <button className={`bm-btn${editor.isActive('link') ? ' active' : ''}`} title="插入/移除链接" onClick={setLink}>
           <Icon name="link" size={15} />
         </button>
+        <div className="bm-sep" />
+        {/* 多选区批量 AI 开关 */}
+        <button
+          className={`bm-btn${multiOn ? ' active' : ''}`}
+          title={multiOn ? `多选区批量改写（已选 ${multiCount} 段，按 ⌘/Ctrl 继续选；点 AI 触发批量）` : '多选区批量 AI 改写：先点这个开关，再用 ⌘/Ctrl + 选区'}
+          onClick={() => {
+            const next = !multiOn
+            setMultiOn(next)
+            if (!next) {
+              clearMultiSelection()
+            } else {
+              beginMultiSelection()
+              const sel = window.getSelection()
+              if (sel?.rangeCount) {
+                for (let i = 0; i < sel.rangeCount; i += 1) {
+                  const r = sel.getRangeAt(i).cloneRange()
+                  captureMultiRange(r)
+                }
+              }
+            }
+          }}
+        >
+          <Icon name="checkBoxMulti" size={15} />
+          {multiOn && multiCount > 0 && <span className="bm-multi-count">{multiCount}</span>}
+        </button>
         {onAi && (
           <>
             <div className="bm-sep" />
-            <button className="bm-btn bm-ai" title="AI 改写选中内容" onClick={() => onAi?.()}>
+            <button
+              className="bm-btn bm-ai"
+              title={multiOn && multiCount > 1 ? `批量 AI 改写 ${multiCount} 段` : 'AI 改写选中内容'}
+              onClick={() => {
+                if (multiOn && multiCount > 1) {
+                  const ranges = getMultiSelectionRanges().filter((r) => !r.collapsed)
+                  onMultiAi?.(ranges)
+                  setMultiOn(false)
+                  clearMultiSelection()
+                } else {
+                  onAi?.()
+                }
+              }}
+            >
               <Icon name="sparkle" size={15} />
+              {multiOn && multiCount > 1 && <span className="bm-multi-count">{multiCount}</span>}
             </button>
           </>
         )}

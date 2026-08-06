@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icons.jsx'
 import ContextMenu from './ContextMenu.jsx'
-import { loadApiStore, saveApiStore, callLLM } from '../lib/api.js'
+import { loadApiStore, saveApiStore, callLLM, loadStreamPref, saveStreamPref } from '../lib/api.js'
 import { PROVIDERS, getProvider } from '../lib/aiProviders.js'
 
 function SelectMenu({ menuId, openMenu, setOpenMenu, value, options, onChange }) {
@@ -40,6 +40,7 @@ function profileFor(store, providerId) {
 
 export default function AiPanel({ embedded = false, onClose }) {
   const [store, setStore] = useState(loadApiStore)
+  const [streamPref, setStreamPrefState] = useState(loadStreamPref)
   const [providerId, setProviderId] = useState(() => loadApiStore().activeProvider || 'openai')
   const [cfg, setCfg] = useState(() => profileFor(loadApiStore(), loadApiStore().activeProvider || 'openai'))
   const [savedTip, setSavedTip] = useState(false)
@@ -159,6 +160,15 @@ export default function AiPanel({ embedded = false, onClose }) {
         </label>
       </div>
       <div className="ai-cfg-actions">
+        <label className="ai-stream-toggle">
+          <input
+            type="checkbox"
+            checked={streamPref}
+            onChange={(e) => { setStreamPrefState(e.target.checked); saveStreamPref(e.target.checked) }}
+          />
+          流式输出
+          <span className="ai-stream-toggle-hint">部分国产 API 对 SSE 支持有限，关闭后改为一次性返回</span>
+        </label>
         <button className="btn" disabled>{savedTip ? '✓ 已保存' : '自动保存'}</button>
         <button className="btn btn-primary" onClick={testConnection} disabled={testing}>{testing ? '测试中…' : '测试连接'}</button>
       </div>
