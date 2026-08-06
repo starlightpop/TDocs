@@ -322,6 +322,26 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
   const editorRef = useRef(null)
+  const activeIdRef = useRef(null)
+  activeIdRef.current = activeId
+  // 退出兜底：关窗前把编辑器最后内容同步落盘 localStorage（秒级自动保存的最后一道保险）
+  useEffect(() => {
+    const flush = () => {
+      try {
+        const ed = editorRef.current
+        const current = docsRef.current
+        if (!ed || !current) return
+        const html = ed.getHTML()
+        const now = Date.now()
+        const next = current.map((d) => (
+          d.id === activeIdRef.current ? { ...d, content: html, updatedAt: now } : d
+        ))
+        saveDocsLocalSync(next)
+      } catch { /* 兜底尽力而为 */ }
+    }
+    window.addEventListener('beforeunload', flush)
+    return () => window.removeEventListener('beforeunload', flush)
+  }, [])
   const zoomAnchorRef = useRef(null)
   const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
@@ -702,15 +722,10 @@ export default function App() {
 
   const handleSelect = (id) => {
     if (id !== activeId && activeDoc) {
-      const snapshot = {
-        id: activeDoc.id,
-        title: activeDoc.title,
-        content: activeDoc.content,
-        savedAt: Date.now(),
-      }
-      // 先保存当前文档内容为恢复快照（避免丢失未点保存就切换的修改）
-      if (idbStorage().isUsable && (activeDoc.content || activeDoc.title)) {
-        idbStorage().setRecovery(snapshot).catch(() => {})
+      // 内容每击键已同步落盘 localStorage，切换不会丢；清除该文档的 recovery 残留，
+      // 避免下次启动误弹恢复面板（版本快照仍由 saveVersionSnapshot 保留）
+      if (idbStorage().isUsable) {
+        idbStorage().deleteRecovery(activeDoc.id).catch(() => {})
       }
       saveVersionSnapshot(activeDoc, { label: '切换前版本' }).catch(() => {})
     }
@@ -750,11 +765,10 @@ export default function App() {
         versionCheckpointRef.current.set(activeId, now)
         saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
       }
-      // recovery（IDB 增强，失败无害）
+      // recovery（IDB 增强，失败无害）。localStorage 已同步落盘，此记录无需保留——
+      // 立即删除，避免正常退出后下次启动误弹“恢复”面板。
       if (changedDoc && idbStorage().isUsable) {
-        idbStorage().setRecovery({
-          id: changedDoc.id, title: changedDoc.title, content: html, savedAt: now,
-        }).catch(() => {})
+        idbStorage().deleteRecovery(changedDoc.id).catch(() => {})
       }
       // 保存状态以 localStorage 为准；IDB 备份失败不误报
       setSaveState(lsOk ? 'saved' : 'failed')
