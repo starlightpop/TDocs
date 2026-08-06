@@ -386,6 +386,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // IDB 启动期心跳：bootstrap 完成后主动读一次确认存储健康；
+  // 避免某些场景下 “未输入也保持保存失败” 的偏差。
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        await bootstrapStorage()
+        if (cancelled) return
+        const current = await idbStorage().getAllDocs()
+        if (Array.isArray(current)) {
+          // IDB 可用：明确为 saved，避免初始化状态与实际不一致
+          setSaveState('saved')
+        } else {
+          setSaveState('failed')
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('TDocs 启动检查 IndexedDB 失败', err)
+        setSaveState('failed')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // ---------- 字号缩放（⌘/Ctrl + 滚轮） ----------
   const [zoom, setZoom] = useState(() => Number(localStorage.getItem('inkdocs.zoom')) || 1)
   const previousZoomRef = useRef(zoom)
@@ -1130,8 +1154,6 @@ export default function App() {
           >
             <Icon name="undo" />
           </button>
-
-          <span className="workspace-mode-badge" />
 
           {/* 设置统一使用中央分类窗口。 */}
           <button className={`icon-btn${showSettings ? ' active' : ''}`} data-tip="设置" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowSettings(true) }}>

@@ -2948,20 +2948,6 @@ html.platform-mac .topbar .menu {
 .find-replace-dock .find-option { width: auto !important; margin: 6px 0 0 24px !important; padding: 0 !important; }
 
 /* File type is explicit and immutable. */
-.workspace-mode-badge,
-.workspace-word-btn { white-space: nowrap; }
-.workspace-mode-badge {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 12px;
-}
 .new-doc-split { position: relative; display: flex; width: 100%; }
 .new-doc-split .new-doc-btn { flex: 1; border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
 .new-doc-arrow { width: 34px; padding: 0 !important; border-left-color: color-mix(in srgb, var(--accent-text) 25%, transparent) !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
