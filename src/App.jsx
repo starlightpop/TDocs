@@ -25,7 +25,7 @@ import { resolveTdocsImages, renderImageTag, compressImageFile } from './lib/ima
 
 const WELCOME_HTML = `
 <h1>欢迎使用 TDocs</h1>
-<p>TDocs 0.2.0-preview 聚焦稳定的本地文档编辑，不再包含尚未完成的 Word/A4/B5 工作区。欢迎文件默认置顶，也可以删除。</p>
+<p>TDocs 0.2.1-preview 聚焦稳定的本地文档编辑，不再包含尚未完成的 Word/A4/B5 工作区。欢迎文件默认置顶，也可以删除。</p>
 <h2>文档编辑</h2>
 <ul>
   <li>连续画布、标题大纲、查找替换、自动保存与本地版本历史</li>
@@ -61,7 +61,13 @@ const WELCOME_HTML = `
 </tbody></table>
 <hr>
 <h2>版本更新</h2>
-<h3>0.2.0-preview（当前版本）</h3>
+<h3>0.2.1-preview（当前版本）</h3>
+<ul>
+  <li>新增 / 命令面板与 ⌘P/⌘K 跨文档搜索，借鉴飞书云文档的操作习惯</li>
+  <li>文档、版本历史与图片迁入 IndexedDB，支持崩溃恢复与真实保存状态</li>
+  <li>AI 改写支持流式输出、中断、多选区批量改写与双栏差异预览</li>
+  <li>大文档体积提示与图片 WebP 自动压缩</li>
+</ul>
 <ul>
   <li>删除不稳定的 Word/A4/B5、分页节点、分页符和代码块拆分逻辑</li>
   <li>统一文档工作区、设置中心、菜单层级和整体视觉</li>
@@ -71,7 +77,7 @@ const WELCOME_HTML = `
 <h3>0.1.2-preview（上一开发版本）</h3>
 <ul>
   <li>建立 AI 选区高亮、多厂商配置、查找替换、本地版本历史和代码运行基础</li>
-  <li>曾试验分页工作区；该试验没有达到发布标准，已从 0.2.0-preview 中完整移除</li>
+  <li>曾试验分页工作区；该试验没有达到发布标准，已从 0.2.x-preview 中完整移除</li>
 </ul>
 <blockquote><p>文档内容与配置默认保存在本机。AI 请求和外部下载只在你主动使用对应功能时发生。</p></blockquote>
 `
@@ -1076,6 +1082,7 @@ export default function App() {
         <div className="brand">
           <img src={logoUrl} alt="TDocs" />
           <span>TDocs</span>
+          <span className="brand-version" title="当前版本">v{__APP_VERSION__}</span>
         </div>
         <input
           className="doc-title-input"

@@ -24,6 +24,7 @@ export default function SettingsDialog({
       <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置" onMouseDown={(event) => event.stopPropagation()}>
         <header className="settings-dialog-head">
           <div><strong>设置</strong><span>应用、外观和 AI 配置</span></div>
+          <span className="settings-version" title="当前版本">v{__APP_VERSION__}</span>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={15} /></button>
         </header>
         <div className="settings-dialog-body">
