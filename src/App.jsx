@@ -8,7 +8,6 @@ import SettingsDialog from './components/SettingsDialog.jsx'
 import AiPrompt from './components/AiPrompt.jsx'
 import FindReplace from './components/FindReplace.jsx'
 import VersionHistory from './components/VersionHistory.jsx'
-import QuickSwitcher from './components/QuickSwitcher.jsx'
 import { Icon } from './components/Icons.jsx'
 import {
   loadDocs, loadActiveId, saveActiveId, createDoc,
@@ -316,7 +315,6 @@ export default function App() {
   const [showOutline, setShowOutline] = useState(false)
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showVersionHistory, setShowVersionHistory] = useState(false)
-  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [editor, setEditor] = useState(null)
   const editorRef = useRef(null)
@@ -643,10 +641,6 @@ export default function App() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         setShowFindReplace(true)
-      }
-      if ((event.metaKey || event.ctrlKey) && (event.key.toLowerCase() === 'p' || event.key.toLowerCase() === 'k')) {
-        event.preventDefault()
-        setShowQuickSwitcher(true)
       }
       if (event.key === 'Escape') setShowFindReplace(false)
     }
@@ -1165,13 +1159,6 @@ export default function App() {
           {/* 大纲面板开关（状态栏已有同功能入口，顶栏不再重复） */}
 
 
-          <button
-            className="icon-btn"
-            data-tip="快速跳转（⌘/Ctrl + P / K）"
-            onClick={() => setShowQuickSwitcher(true)}
-          >
-            <Icon name="search" size={16} />
-          </button>
           {activeDoc && (
             <div className="menu-wrap">
               <button className="btn" onClick={(e) => { e.stopPropagation(); closeAllMenus(); setShowExportMenu(!showExportMenu) }}>
@@ -1374,30 +1361,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      {showQuickSwitcher && (
-        <QuickSwitcher
-          docs={docs}
-          onClose={() => setShowQuickSwitcher(false)}
-          onPick={(doc, contentPos) => {
-            setActiveId(doc.id)
-            setEditor(null)
-            setHeadings([])
-            setShowQuickSwitcher(false)
-            // 编辑器 onReady 之后再设选区
-            if (contentPos) {
-              setTimeout(() => {
-                try {
-                  const ed = editorRef.current
-                  if (ed && ed.state.doc.textContent.length >= contentPos) {
-                    ed.chain().focus().setTextSelection(contentPos).run()
-                  }
-                } catch { /* 选区定位失败不影响主流程 */ }
-              }, 60)
-            }
-          }}
-        />
-      )}
 
       {showSettings && (
         <SettingsDialog

@@ -36,6 +36,7 @@ function normalizeGroup(group = {}) {
 export function normalizeDoc(doc = {}) {
   const normalized = {
     ...doc,
+    id: doc.id || `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: doc.title || '无标题文档',
     content: doc.content || '',
     kind: 'document',

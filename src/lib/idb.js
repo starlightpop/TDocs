@@ -44,7 +44,7 @@ function createIDBDriver() {
     return db.transaction(store, mode).objectStore(store)
   }
 
-  const get = (store, key) => async () => {
+  const get = (store) => async (key) => {
     const s = await tx(store)()
     return new Promise((resolve, reject) => {
       const req = s.get(key)
@@ -52,7 +52,7 @@ function createIDBDriver() {
       req.onerror = () => reject(req.error)
     })
   }
-  const put = (store, value) => async () => {
+  const put = (store) => async (value) => {
     const s = await tx(store, 'readwrite')()
     return new Promise((resolve, reject) => {
       const req = s.put(value)
@@ -60,7 +60,7 @@ function createIDBDriver() {
       req.onerror = () => reject(req.error)
     })
   }
-  const del = (store, key) => async () => {
+  const del = (store) => async (key) => {
     const s = await tx(store, 'readwrite')()
     return new Promise((resolve, reject) => {
       const req = s.delete(key)
@@ -88,22 +88,23 @@ function createIDBDriver() {
   return {
     kind: 'idb',
     getDoc: get(STORE_DOCS),
-    putDoc: put(STORE_DOCS),
-    deleteDoc: del(STORE_DOCS),
+    putDoc: (doc) => put(STORE_DOCS)(doc),
+    deleteDoc: (id) => del(STORE_DOCS)(id),
     getAllDocs: all(STORE_DOCS),
     clearDocs: clear(STORE_DOCS),
     getMeta: get(STORE_META),
-    putMeta: put(STORE_META),
-    deleteMeta: del(STORE_META),
+    putMeta: (key, value) => put(STORE_META)({ key, value }),
+    getMetaByKey: get(STORE_META),
+    deleteMeta: (key) => del(STORE_META)(key),
     clearMeta: clear(STORE_META),
     getRecovery: get(STORE_RECOVERY),
-    putRecovery: put(STORE_RECOVERY),
-    deleteRecovery: del(STORE_RECOVERY),
+    putRecovery: (rec) => put(STORE_RECOVERY)(rec),
+    deleteRecovery: (id) => del(STORE_RECOVERY)(id),
     getAllRecoveries: all(STORE_RECOVERY),
     clearRecoveries: clear(STORE_RECOVERY),
     getImage: get(STORE_IMAGES),
-    putImage: put(STORE_IMAGES),
-    deleteImage: del(STORE_IMAGES),
+    putImage: (img) => put(STORE_IMAGES)(img),
+    deleteImage: (id) => del(STORE_IMAGES)(id),
     getAllImages: all(STORE_IMAGES),
     clearImages: clear(STORE_IMAGES),
   }

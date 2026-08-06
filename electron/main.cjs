@@ -54,6 +54,25 @@ function createWindow() {
   })
 
   win.once('ready-to-show', () => win.show())
+  // 调试：将渲染进程 console / 错误 / 失败请求转发到主进程 stderr 和文件，
+  // 启动时设置 TDOCS_DEBUG=1 即可生效。不影响生产用户。
+  if (process.env.TDOCS_DEBUG) {
+    const logFile = path.join(app.getPath('temp'), 'tdocs-debug.log')
+    try { fs.unlinkSync(logFile) } catch { /* ignore */ }
+    const append = (line) => {
+      try { fs.appendFileSync(logFile, line + '\n') } catch { /* ignore */ }
+      process.stderr.write(line + '\n')
+    }
+    append(`[startup] TDocs ${app.getVersion()} pid=${process.pid} electron=${process.versions.electron} platform=${process.platform}`)
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const tag = ['VERBOSE', 'INFO', 'WARN', 'ERROR'][level] || 'LOG'
+      append(`[renderer:${tag}] ${message} (${sourceId}:${line})`)
+    })
+    win.webContents.on('render-process-gone', (_event, details) => {
+      append(`[renderer:gone] reason=${details.reason}`)
+    })
+    append(`[startup] log file: ${logFile}`)
+  }
   // 标记平台，供 CSS 针对 macOS 隐藏标题栏布局做适配（红绿灯避让 / 拖动区域）
   win.webContents.on('did-finish-load', () => {
     if (isMac) {
