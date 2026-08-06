@@ -13,6 +13,7 @@ import {
   loadDocs, loadActiveId, saveActiveId, createDoc,
   loadTheme, saveTheme, stripHtml, classifyDocSize, estimateDocSize, formatTime,
   loadGroups, saveGroups, createGroup, bootstrapStorage, tryWriteDocs, getDoc,
+  saveDocsLocalSync,
 } from './lib/storage.js'
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
@@ -306,10 +307,6 @@ export default function App() {
     const id = loadActiveId()
     return id || loadDocs()[0]?.id || null
   })
-  // docs 最新快照同步到 ref（供自动保存 flush 使用）
-  useEffect(() => {
-    docsRef.current = docs
-  }, [docs])
   const [saveState, setSaveState] = useState('saved') // saved | saving | failed
   const [stats, setStats] = useState({ words: 0, chars: 0 })
   const [selectedChars, setSelectedChars] = useState(0)
@@ -323,12 +320,6 @@ export default function App() {
   const [editor, setEditor] = useState(null)
   const editorRef = useRef(null)
   const zoomAnchorRef = useRef(null)
-  // 自动保存：防抖 + 节流双保险
-  const autoSaveTimerRef = useRef(null)        // 空闲 800ms 保存的定时器
-  const lastSaveAtRef = useRef(0)              // 上次实际落盘时间
-  const pendingContentRef = useRef(null)       // 尚未落盘的最新内容
-  const lastSavedContentRef = useRef(null)     // 已落盘的内容（去重）
-  const docsRef = useRef([])                   // docs 的最新快照（供写入使用）
   const [zoomMenuPos, setZoomMenuPos] = useState(null)
   const versionCheckpointRef = useRef(new Map())
   const lastSelectionRef = useRef(null)
@@ -696,16 +687,6 @@ export default function App() {
   }
 
   const handleSelect = (id) => {
-    // 切换文档前：先强制把当前文档未落盘的内容写入（避免丢失）
-    const pendingContent = pendingContentRef.current
-    if (pendingContent != null && pendingContent !== lastSavedContentRef.current && activeId) {
-      lastSavedContentRef.current = pendingContent
-      lastSaveAtRef.current = Date.now()
-      const snapshot = docsRef.current.map((d) => (
-        d.id === activeId ? { ...d, content: pendingContent, updatedAt: Date.now() } : d
-      ))
-      tryWriteDocs(snapshot).catch(() => {})
-    }
     if (id !== activeId && activeDoc) {
       const snapshot = {
         id: activeDoc.id,
@@ -734,7 +715,8 @@ export default function App() {
 
   const handleContentChange = useCallback(
     (html) => {
-      pendingContentRef.current = html
+      // 回到初始版的简洁逻辑：setDocs updater 里同步写 localStorage。
+      // 初始版 saveDocs 是同步 localStorage.setItem，从不失败，真实保存就靠它。
       setDocs((prev) => {
         const now = Date.now()
         let changedDoc = null
@@ -744,96 +726,36 @@ export default function App() {
           changedDoc = updated
           return updated
         })
+        // 同步写 localStorage（初始版核心逻辑：这一行才是真正的"自动保存"）
+        saveDocsLocalSync(next)
+        // 版本快照
         const lastCheckpoint = versionCheckpointRef.current.get(activeId) || 0
         if (changedDoc && now - lastCheckpoint >= 5 * 60 * 1000) {
           versionCheckpointRef.current.set(activeId, now)
-          Promise.resolve().then(() => {
-            saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
-          })
+          saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
         }
+        // recovery
         if (changedDoc && idbStorage().isUsable) {
           idbStorage().setRecovery({
-            id: changedDoc.id,
-            title: changedDoc.title,
-            content: html,
-            savedAt: now,
+            id: changedDoc.id, title: changedDoc.title, content: html, savedAt: now,
           }).catch(() => {})
         }
         return next
       })
-
-      // —— 自动保存：防抖（空闲 800ms 写）+ 节流（持续输入每 2s 强制写）——
-      // 之前 Editor 内部 600ms 防抖导致持续输入时永远不落盘（假保存），
-      // 现在改为每次输入立即调度，由这里保证最终一定写入。
-      const SAVE_DEBOUNCE_MS = 800
-      const SAVE_THROTTLE_MS = 2000
+      // IDB 异步备份（不影响保存状态）
       setSaveState('saving')
-
-      const flush = () => {
-        const content = pendingContentRef.current
-        if (content == null) return
-        if (content === lastSavedContentRef.current) {
-          // 内容没变化（例如只移动光标）不重复写
-          return
-        }
-        lastSavedContentRef.current = content
-        lastSaveAtRef.current = Date.now()
-        const snapshot = docsRef.current.map((d) => (
-          d.id === activeId ? { ...d, content, updatedAt: Date.now() } : d
-        ))
-        tryWriteDocs(snapshot).then((res) => {
-          setSaveState(res.ok ? 'saved' : 'failed')
-        }).catch(() => setSaveState('failed'))
-      }
-
-      // 防抖：每次输入重置 800ms 定时器
-      clearTimeout(autoSaveTimerRef.current)
-      autoSaveTimerRef.current = setTimeout(() => {
-        autoSaveTimerRef.current = null
-        flush()
-      }, SAVE_DEBOUNCE_MS)
-
-      // 节流：持续输入时，距上次落盘超过 2s 立即强制写（不再等空闲）
-      if (Date.now() - lastSaveAtRef.current >= SAVE_THROTTLE_MS) {
-        flush()
-      }
+      tryWriteDocs(
+        docs.map((d) => (d.id === activeId ? { ...d, content: html, updatedAt: Date.now() } : d))
+      ).then((res) => {
+        setSaveState(res.ok ? 'saved' : 'failed')
+      }).catch(() => { /* localStorage 已经存了，IDB 失败不改变保存状态 */ })
     },
-    [activeId],
+    [activeId, docs],
   )
 
   const handleTitleChange = (title) => {
     persist(docs.map((d) => (d.id === activeId ? { ...d, title, autoTitle: false, updatedAt: Date.now() } : d)))
   }
-
-  // 失焦 / 切换窗口 / 关闭前：强制把未落盘内容写入（真正自动保存的兜底）
-  useEffect(() => {
-    const forceFlush = () => {
-      clearTimeout(autoSaveTimerRef.current)
-      autoSaveTimerRef.current = null
-      const content = pendingContentRef.current
-      const id = activeId
-      if (content == null || !id) return
-      if (content === lastSavedContentRef.current) return
-      lastSavedContentRef.current = content
-      lastSaveAtRef.current = Date.now()
-      const snapshot = docsRef.current.map((d) => (
-        d.id === id ? { ...d, content, updatedAt: Date.now() } : d
-      ))
-      tryWriteDocs(snapshot).then((res) => {
-        setSaveState(res.ok ? 'saved' : 'failed')
-      }).catch(() => setSaveState('failed'))
-    }
-    window.addEventListener('blur', forceFlush)
-    window.addEventListener('beforeunload', forceFlush)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') forceFlush()
-    })
-    return () => {
-      window.removeEventListener('blur', forceFlush)
-      window.removeEventListener('beforeunload', forceFlush)
-      document.removeEventListener('visibilitychange', forceFlush)
-    }
-  }, [activeId])
 
   const handleRestoreVersion = (version) => {
     if (!activeDoc || !version) return

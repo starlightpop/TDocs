@@ -350,6 +350,31 @@ export function formatTime(timestamp) {
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
 }
 
+// 直写 localStorage 完整文档（同步、从不抛异常）。IDB 可能因 quota / put 错误失败，
+// 但 localStorage 作为兜底保证了最基本的"打了字就不会丢"。
+export function saveDocsLocalSync(docs) {
+  try {
+    const arr = (docs || []).map(normalizeDoc)
+    localStorage.setItem(DOCS_KEY, JSON.stringify(arr))
+    return true
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[TDocs] localStorage 保存失败', e)
+    return false
+  }
+}
+
+// 从 localStorage 读回完整文档（loadDocs 只返回元数据，这里给兜底用）
+export function loadDocsLocalSync() {
+  try {
+    const raw = localStorage.getItem(DOCS_KEY)
+    if (!raw) return []
+    return JSON.parse(raw).map(normalizeDoc)
+  } catch {
+    return []
+  }
+}
+
 export function estimateDocSize(content = '') {
   return String(content || '').length
 }
