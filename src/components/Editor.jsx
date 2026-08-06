@@ -561,11 +561,10 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
       })
       // 大纲更新
       onHeadings?.(extractHeadings(ed))
-      // 内容防抖保存
-      clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => {
-        onChange?.(ed.getHTML())
-      }, 600)
+      // 内容保存：不再在编辑器内做 600ms 防抖——持续输入时 onChange 永远不触发，
+      // 导致内容一直不落盘而 UI 却显示“已保存”。改为每次更新立即上报，
+      // 由 App 层做“防抖 + 节流”双保险（空闲 800ms 保存 / 持续输入每 2s 强制保存）。
+      onChange?.(ed.getHTML())
     },
   })
 
