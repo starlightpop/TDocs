@@ -307,6 +307,9 @@ export default function App() {
     const id = loadActiveId()
     return id || loadDocs()[0]?.id || null
   })
+  // docs 最新快照 ref：供 handleContentChange 无竞态取数（避免 updater/闭包旧值覆盖新值）
+  const docsRef = useRef(docs)
+  useEffect(() => { docsRef.current = docs }, [docs])
   const [saveState, setSaveState] = useState('saved') // saved | saving | failed
   const [stats, setStats] = useState({ words: 0, chars: 0 })
   const [selectedChars, setSelectedChars] = useState(0)
@@ -346,41 +349,36 @@ export default function App() {
       try {
         await bootstrapStorage()
         if (cancelled) return
-        // 异步回流 docs：把 IDB 里真实 content 填回去（超时则用 localStorage 全文兜底）
-        const s = idbStorage()
-        const loaded = await withTimeout((async () => {
-          const ids = (await s.getAllDocs()).map((d) => d.id)
-          const out = []
-          for (const id of ids) {
-            const doc = await s.getDoc(id)
-            if (doc) out.push(doc)
-          }
-          return out
-        })(), 4000, null)
-        if (cancelled) return
-        if (loaded && loaded.length) {
-          loaded.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-          setDocs((prev) => {
-            const map = new Map(loaded.map((d) => [d.id, d]))
-            const next = prev.map((d) => (map.has(d.id) ? { ...map.get(d.id) } : d))
-            // 确保欢迎文件始终在最前
-            const welcome = next.find((d) => d.isWelcome)
-            if (welcome) {
-              const rest = next.filter((d) => d.id !== welcome.id)
-              return [welcome, ...rest]
+        // 加载以 localStorage 全文为唯一事实源（每次输入同步直写，始终最新且可靠），
+        // IDB 仅在 localStorage 缺失时补充——绝不拿 IDB 旧数据覆盖 localStorage 新数据。
+        let nextDocs = loadDocsLocalSync()
+        if (!nextDocs.length) {
+          const s = idbStorage()
+          const loaded = await withTimeout((async () => {
+            const ids = (await s.getAllDocs()).map((d) => d.id)
+            const out = []
+            for (const id of ids) {
+              const doc = await s.getDoc(id)
+              if (doc) out.push(doc)
             }
-            return next
-          })
-        } else {
-          // IDB 读不出全文（超时/空）：localStorage 全文兜底，保证“打了字就不会丢”
-          const legacy = loadDocsLocalSync()
-          if (legacy.length) {
-            legacy.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-            setDocs(legacy)
-          }
+            return out
+          })(), 4000, null)
+          if (loaded && loaded.length) nextDocs = loaded
         }
-        // 恢复快照（读取也受超时保护，IDB 卡死时跳过）
-        const recs = await withTimeout(s.listRecoveries(), 2000, null)
+        if (cancelled) return
+        if (nextDocs.length) {
+          nextDocs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+          // 确保欢迎文件始终在最前
+          const welcome = nextDocs.find((d) => d.isWelcome)
+          if (welcome) {
+            nextDocs = [welcome, ...nextDocs.filter((d) => d.id !== welcome.id)]
+          }
+          setDocs(nextDocs)
+          docsRef.current = nextDocs
+        }
+        // 恢复快照（读取受超时保护，IDB 卡死时跳过）
+        const s2 = idbStorage()
+        const recs = await withTimeout(s2.listRecoveries(), 2000, null)
         if (cancelled) return
         const items = buildRecoveryItems(recs || [])
         if (items.length && !recoveryResolved) {
@@ -394,6 +392,7 @@ export default function App() {
           if (legacy.length) {
             legacy.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
             setDocs(legacy)
+            docsRef.current = legacy
           }
         }
         // eslint-disable-next-line no-console
@@ -444,25 +443,20 @@ export default function App() {
   // 保存全部文档（防抖由调用点控制，这里只负责异步写入）。
   // 必须在“拿到 IDB 返回”之后再 setSaveState，避免假保存。
   // 必须提前声明：多个 useCallback 在闭包里引用它，提前定义可避免 TDZ。
-  const persist = useCallback(async (next) => {
+  const persist = useCallback((next) => {
     setDocs(next)
-    setSaveState('saving')
-    const result = await tryWriteDocs(next)
-    if (result.ok) {
-      setSaveState('saved')
-      return result
-    }
-    setSaveState('failed')
-    return result
+    docsRef.current = next
+    // 改名/删除/恢复版本等也同步直写 localStorage（a18c8f2 同款可靠逻辑）
+    const lsOk = saveDocsLocalSync(next)
+    setSaveState(lsOk ? 'saved' : 'failed')
+    // IDB 后台备份，失败不影响状态
+    tryWriteDocs(next).catch(() => {})
   }, [])
 
-  // 重试最后一次失败：重新走一次 IDB 写入
+  // 重试最后一次失败：用最新快照重新走一次保存
   const retryPersist = useCallback(() => {
-    setDocs((current) => {
-      persist(current)
-      return current
-    })
-  }, [persist])
+    persist(docsRef.current || docs)
+  }, [persist, docs])
 
   const activeDoc = useMemo(() => docs.find((d) => d.id === activeId) || null, [docs, activeId])
 
@@ -735,42 +729,38 @@ export default function App() {
 
   const handleContentChange = useCallback(
     (html) => {
-      // 回到初始版的简洁逻辑：setDocs updater 里同步写 localStorage。
-      // 初始版 saveDocs 是同步 localStorage.setItem，从不失败，真实保存就靠它。
-      setDocs((prev) => {
-        const now = Date.now()
-        let changedDoc = null
-        const next = prev.map((d) => {
-          if (d.id !== activeId) return d
-          const updated = { ...d, content: html, updatedAt: now }
-          changedDoc = updated
-          return updated
-        })
-        // 同步写 localStorage（初始版核心逻辑：这一行才是真正的"自动保存"）
-        saveDocsLocalSync(next)
-        // 版本快照
-        const lastCheckpoint = versionCheckpointRef.current.get(activeId) || 0
-        if (changedDoc && now - lastCheckpoint >= 5 * 60 * 1000) {
-          versionCheckpointRef.current.set(activeId, now)
-          saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
-        }
-        // recovery
-        if (changedDoc && idbStorage().isUsable) {
-          idbStorage().setRecovery({
-            id: changedDoc.id, title: changedDoc.title, content: html, savedAt: now,
-          }).catch(() => {})
-        }
-        return next
+      // 保存主路径对齐 a18c8f2 的可靠模式：localStorage 同步直写是唯一事实源，
+      // IDB 只是后台异步备份（失败/卡死不影响保存状态，绝不回灌旧数据）。
+      // 用 docsRef 取最新快照（避免 updater 与外部异步写的闭包竞态——旧内容覆盖新内容）。
+      const now = Date.now()
+      let changedDoc = null
+      const next = docsRef.current.map((d) => {
+        if (d.id !== activeId) return d
+        const updated = { ...d, content: html, updatedAt: now }
+        changedDoc = updated
+        return updated
       })
-      // IDB 异步备份（不影响保存状态）
-      setSaveState('saving')
-      tryWriteDocs(
-        docs.map((d) => (d.id === activeId ? { ...d, content: html, updatedAt: Date.now() } : d))
-      ).then((res) => {
-        setSaveState(res.ok ? 'saved' : 'failed')
-      }).catch(() => { /* localStorage 已经存了，IDB 失败不改变保存状态 */ })
+      docsRef.current = next
+      setDocs(next)
+      // 同步直写 localStorage（初始版核心：打了字就落盘）
+      const lsOk = saveDocsLocalSync(next)
+      // 版本快照（5 分钟节流）
+      const lastCheckpoint = versionCheckpointRef.current.get(activeId) || 0
+      if (changedDoc && now - lastCheckpoint >= 5 * 60 * 1000) {
+        versionCheckpointRef.current.set(activeId, now)
+        saveVersionSnapshot(changedDoc, { label: '自动版本' }).catch(() => {})
+      }
+      // recovery（IDB 增强，失败无害）
+      if (changedDoc && idbStorage().isUsable) {
+        idbStorage().setRecovery({
+          id: changedDoc.id, title: changedDoc.title, content: html, savedAt: now,
+        }).catch(() => {})
+      }
+      // 保存状态以 localStorage 为准；IDB 备份失败不误报
+      setSaveState(lsOk ? 'saved' : 'failed')
+      tryWriteDocs(next).catch(() => {})
     },
-    [activeId, docs],
+    [activeId],
   )
 
   const handleTitleChange = (title) => {
