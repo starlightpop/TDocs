@@ -13,7 +13,7 @@ import {
   loadDocs, loadActiveId, saveActiveId, createDoc,
   loadTheme, saveTheme, stripHtml, classifyDocSize, estimateDocSize, formatTime,
   loadGroups, saveGroups, createGroup, bootstrapStorage, tryWriteDocs, getDoc,
-  saveDocsLocalSync,
+  saveDocsLocalSync, loadDocsLocalSync, withTimeout,
 } from './lib/storage.js'
 import { exportHtml, exportMarkdown, exportText, exportDocx, exportEpub } from './lib/exporter.js'
 import { scrollToHeadingByIndex, setHeadingsLevel } from './lib/headings.js'
@@ -345,16 +345,20 @@ export default function App() {
     ;(async () => {
       try {
         await bootstrapStorage()
-        const ids = (await idbStorage().getAllDocs()).map((d) => d.id)
         if (cancelled) return
-        // 异步回流 docs：把 IDB 里真实 content 填回去
+        // 异步回流 docs：把 IDB 里真实 content 填回去（超时则用 localStorage 全文兜底）
         const s = idbStorage()
-        const loaded = []
-        for (const id of ids) {
-          const doc = await s.getDoc(id)
-          if (doc) loaded.push(doc)
-        }
-        if (loaded.length) {
+        const loaded = await withTimeout((async () => {
+          const ids = (await s.getAllDocs()).map((d) => d.id)
+          const out = []
+          for (const id of ids) {
+            const doc = await s.getDoc(id)
+            if (doc) out.push(doc)
+          }
+          return out
+        })(), 4000, null)
+        if (cancelled) return
+        if (loaded && loaded.length) {
           loaded.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
           setDocs((prev) => {
             const map = new Map(loaded.map((d) => [d.id, d]))
@@ -367,18 +371,33 @@ export default function App() {
             }
             return next
           })
+        } else {
+          // IDB 读不出全文（超时/空）：localStorage 全文兜底，保证“打了字就不会丢”
+          const legacy = loadDocsLocalSync()
+          if (legacy.length) {
+            legacy.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+            setDocs(legacy)
+          }
         }
-        const recs = await s.listRecoveries()
+        // 恢复快照（读取也受超时保护，IDB 卡死时跳过）
+        const recs = await withTimeout(s.listRecoveries(), 2000, null)
         if (cancelled) return
-        const items = buildRecoveryItems(recs)
+        const items = buildRecoveryItems(recs || [])
         if (items.length && !recoveryResolved) {
           setRecoveryItems(items)
           setRecoveryPanelOpen(true)
         }
       } catch (err) {
-        // 静默失败，老数据仍可用
+        // 全链路失败的最后兜底：localStorage 全文
+        if (!cancelled) {
+          const legacy = loadDocsLocalSync()
+          if (legacy.length) {
+            legacy.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+            setDocs(legacy)
+          }
+        }
         // eslint-disable-next-line no-console
-        console.warn('TDocs 启动时无法同步 IndexedDB', err)
+        console.warn('TDocs 启动时无法同步 IndexedDB，已回退 localStorage', err)
       }
     })()
     return () => { cancelled = true }
@@ -393,12 +412,13 @@ export default function App() {
       try {
         await bootstrapStorage()
         if (cancelled) return
-        const current = await idbStorage().getAllDocs()
+        const current = await withTimeout(idbStorage().getAllDocs(), 3000, null)
         if (Array.isArray(current)) {
           // IDB 可用：明确为 saved，避免初始化状态与实际不一致
           setSaveState('saved')
         } else {
-          setSaveState('failed')
+          // IDB 超时/不可用：localStorage 直写已保底，UI 不应报错
+          setSaveState('saved')
         }
       } catch (err) {
         // eslint-disable-next-line no-console

@@ -605,6 +605,23 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
+  // 外部内容回填：启动加载 / 恢复快照等场景，App 层把 localStorage/IDB 全文填进 docs 后，
+  // Editor 需把新内容同步进来。自己输入产生的内容（getHTML 已等于 doc.content）不回灌，避免光标跳动。
+  useEffect(() => {
+    if (!editor) return
+    const html = doc?.content || ''
+    if (editor.getHTML() === html) return
+    // 仅在编辑器当前内容确实落后于外部时回填（emitUpdate=false，不回环上报）
+    editor.commands.setContent(html, false)
+    // 回填不触发 onUpdate，手动补一次统计与大纲
+    onStats?.({
+      words: editor.storage.characterCount.words(),
+      chars: editor.storage.characterCount.characters(),
+    })
+    onHeadings?.(extractHeadings(editor))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, doc?.id, doc?.content])
+
   useEffect(() => () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     if (editor) onChange?.(editor.getHTML())

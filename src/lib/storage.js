@@ -185,6 +185,15 @@ export function saveTheme(theme) {
 
 // ---------- 异步 / 真实写入 ----------
 
+// IDB 超时保护：IDB 可能因 leveldb 损坏 / 版本迁移 / 环境异常而永不回调，
+// 此时绝不能阻塞应用——localStorage 直写才是真正的保底（见 handleContentChange）。
+export function withTimeout(promise, ms = 3000, fallback = null) {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ])
+}
+
 let writeQueue = Promise.resolve()
 
 function enqueueWrite(task) {
@@ -223,8 +232,11 @@ export function tryWriteDocs(docs) {
     const normalized = (docs || []).map(normalizeDoc)
     const s = storage()
     try {
-      // 先删旧的（id 不再出现）
-      const existing = await s.getAllDocs()
+      // 先删旧的（id 不再出现）；IDB 卡死/超时则直接放弃异步写，localStorage 直写已保底
+      const existing = await withTimeout(s.getAllDocs(), 3000, null)
+      if (existing === null) {
+        return { ok: false, reason: 'idb-timeout' }
+      }
       const incomingIds = new Set(normalized.map((d) => d.id))
       for (const prev of existing) {
         if (!incomingIds.has(prev.id)) {
@@ -232,7 +244,7 @@ export function tryWriteDocs(docs) {
         }
       }
       for (const doc of normalized) {
-        await s.setDoc(doc)
+        await withTimeout(s.setDoc(doc), 3000, null)
       }
       writeCache(normalized)
       cachedDocs = null
@@ -283,9 +295,28 @@ export async function bootstrapStorage() {
     return { ok: false, reason: 'idb-unavailable', usedLegacy: legacy.length > 0 }
   }
   try {
-    if (localStorage.getItem(MIGRATION_FLAG) === '1') {
-      // 已迁移；只需要把元数据缓存对齐
-      const docs = await s.getAllDocs()
+    const migrated = localStorage.getItem(MIGRATION_FLAG) === '1'
+    // IDB 可能卡死（leveldb 损坏 / 环境异常）：超时后走 localStorage 兜底，绝不让启动流程挂住
+    const docs = await withTimeout(s.getAllDocs(), 3000, null)
+    if (docs === null) {
+      const legacy = readLegacyDocs()
+      if (legacy.length) {
+        cachedDocs = legacy.map((d) => normalizeMeta(d))
+        writeCache(legacy)
+      }
+      return { ok: false, reason: 'idb-timeout', usedLegacy: legacy.length > 0 }
+    }
+    if (migrated) {
+      // 已迁移；只需要把元数据缓存对齐。IDB 意外为空时回退 localStorage，避免侧栏/编辑器空
+      if (!docs.length) {
+        const legacy = readLegacyDocs()
+        if (legacy.length) {
+          writeCache(legacy)
+          cachedDocs = null
+          invalidateCache()
+          return { ok: true, migrated: false, count: legacy.length, fromLegacy: true }
+        }
+      }
       writeCache(docs)
       cachedDocs = null
       invalidateCache()
@@ -294,10 +325,10 @@ export async function bootstrapStorage() {
     // 首次启动：把 localStorage 中的 docs + groups 全部复制到 IDB
     const legacyDocs = readLegacyDocs()
     const legacyGroups = readLegacyGroups()
-    for (const doc of legacyDocs) await s.setDoc(doc)
-    if (legacyGroups.length) await s.setMeta(META_GROUPS_KEY, legacyGroups)
+    for (const doc of legacyDocs) await withTimeout(s.setDoc(doc), 3000, null)
+    if (legacyGroups.length) await withTimeout(s.setMeta(META_GROUPS_KEY, legacyGroups), 3000, null)
     const active = localStorage.getItem(ACTIVE_KEY)
-    if (active) await s.setMeta(META_ACTIVE_KEY, active)
+    if (active) await withTimeout(s.setMeta(META_ACTIVE_KEY, active), 3000, null)
     localStorage.setItem(MIGRATION_FLAG, '1')
     writeCache(legacyDocs)
     cachedDocs = null
