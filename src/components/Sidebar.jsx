@@ -7,7 +7,7 @@ export default function Sidebar({
   docs, groups, activeId, collapsed, headings = [],
   onSelect, onCreate, onRename, onDelete,
   onMoveDoc, onAddGroup, onRenameGroup, onDeleteGroup,
-  onJumpHeading, treeOpen = true, editingGroupId, onCommitGroupName,
+  onJumpHeading, activeHeadingIdx = -1, treeOpen = true, editingGroupId, onCommitGroupName,
   onRenameDoc, onSetHeadingLevel, onDragExport, onReorderGroups, onOpenFiles, onTogglePin, onToggleGroupPin,
 }) {
   const [query, setQuery] = useState('')
@@ -164,7 +164,7 @@ export default function Sidebar({
           {headings.map((h, i) => (
             <div
               key={`${i}-${h.text}`}
-              className={`doc-heading lv-${h.level}${headingSel.has(i) ? ' selected' : ''}`}
+              className={`doc-heading lv-${h.level}${headingSel.has(i) ? ' selected' : ''}${i === activeHeadingIdx ? ' active' : ''}`}
               title={h.text}
               onClick={(e) => {
                 e.stopPropagation()

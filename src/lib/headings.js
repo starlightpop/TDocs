@@ -1,11 +1,14 @@
-// 大纲：从编辑器中提取标题列表，支持按索引跳转与批量修改级别
+// 大纲：从编辑器中提取标题列表（含文档位置 pos），支持按索引跳转与批量修改级别
 
 export function extractHeadings(editor) {
-  if (!editor?.view?.dom) return []
-  const nodes = editor.view.dom.querySelectorAll('h1, h2, h3, h4, h5, h6')
-  return Array.from(nodes)
-    .map((el) => ({ level: Number(el.tagName[1]), text: el.textContent.trim() }))
-    .filter((h) => h.text)
+  if (!editor?.state) return []
+  const result = []
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'heading' && node.textContent.trim()) {
+      result.push({ level: node.attrs.level || 1, text: node.textContent.trim(), pos })
+    }
+  })
+  return result
 }
 
 /** 按当前 DOM 顺序跳转到第 index 个标题（不依赖持久 id，永不失效） */

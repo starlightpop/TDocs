@@ -458,7 +458,12 @@ html.platform-mac .topbar .menu {
 }
 .doc-heading:hover {
   background: var(--surface-2);
+}
+/* 当前章节高亮：光标所在章节（或滚动兜底），大纲/侧边栏标题树共用语义 */
+.doc-heading.active {
   color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
 }
 .doc-heading.lv-1 {
   color: var(--text);
@@ -2929,21 +2934,24 @@ html.platform-mac .topbar .menu {
    UX round 3: immutable workspaces and stable code tooling
    ============================================================ */
 
-/* Compact floating find box; it no longer consumes an application row. */
+/* 查找/替换：dock 在工具栏下方（占位一条，不遮挡编辑区）。
+   此前改为 fixed 浮动框会悬浮遮挡内容，恢复为占位式 dock。 */
 .find-replace.find-replace-dock {
-  position: fixed !important;
-  top: calc(var(--topbar-h) + var(--toolbar-h) + 8px) !important;
-  right: 18px !important;
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
   left: auto !important;
-  z-index: 1500;
-  width: min(500px, calc(100vw - 36px)) !important;
-  max-width: 500px !important;
-  padding: 8px !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-panel) !important;
-  background: color-mix(in srgb, var(--surface) 98%, transparent) !important;
-  box-shadow: var(--floating-shadow) !important;
-  backdrop-filter: blur(16px) saturate(1.1) !important;
+  z-index: 24;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 7px 12px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--surface) !important;
+  backdrop-filter: none !important;
 }
 .find-replace-dock .find-row,
 .find-replace-dock .replace-row { max-width: none !important; margin: 0 !important; }

@@ -1099,9 +1099,27 @@ export default function App() {
     handleOutlineJump(i)
   }
 
-  // 大纲打开时，根据滚动位置高亮当前标题
+  // 光标驱动：选区变化时高亮光标前最近标题（侧边栏/大纲的当前章节）
   useEffect(() => {
-    if (!showOutline) return
+    if (!editor) return undefined
+    const update = () => {
+      if (Date.now() < jumpSuppressRef.current) return
+      const pos = editor.state.selection.from
+      let idx = -1
+      for (let i = 0; i < headings.length; i++) {
+        if (headings[i].pos <= pos) idx = i
+        else break
+      }
+      setActiveHeadingIdx(idx)
+    }
+    editor.on('selectionUpdate', update)
+    update()
+    return () => editor.off('selectionUpdate', update)
+  }, [editor, headings])
+
+  // 滚动驱动兜底：大纲或侧边栏标题树可见时，根据滚动位置高亮当前标题
+  useEffect(() => {
+    if (!activeDoc) return
     const canvas = document.querySelector('.canvas')
     if (!canvas) return
     const onScroll = () => {
@@ -1125,7 +1143,7 @@ export default function App() {
     canvas.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
     return () => canvas.removeEventListener('scroll', onScroll)
-  }, [showOutline, activeId, headings.length])
+  }, [activeDoc, headings.length])
 
   return (
     <div
@@ -1245,6 +1263,7 @@ export default function App() {
           onRenameGroup={handleRenameGroup}
           onDeleteGroup={handleDeleteGroup}
           onJumpHeading={jumpToHeading}
+          activeHeadingIdx={activeHeadingIdx}
           treeOpen={treeOpen}
           editingGroupId={editingGroupId}
           onCommitGroupName={commitGroupName}
