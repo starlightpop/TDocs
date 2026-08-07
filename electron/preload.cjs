@@ -12,6 +12,15 @@ contextBridge.exposeInMainWorld('tdocs', {
   runCode: (payload) => ipcRenderer.invoke('run-code', payload),
   readClipboardText: () => ipcRenderer.invoke('clipboard-read-text'),
   readClipboardHTML: () => ipcRenderer.invoke('clipboard-read-html'),
+  // 自更新
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateDownload: () => ipcRenderer.invoke('update-download'),
+  updateApply: (filePath) => ipcRenderer.invoke('update-apply', filePath),
+  onUpdateProgress: (callback) => {
+    const listener = (_event, payload) => callback?.(payload)
+    ipcRenderer.on('update-progress', listener)
+    return () => ipcRenderer.removeListener('update-progress', listener)
+  },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   toggleMaximize: () => ipcRenderer.invoke('toggle-maximize'),
 })

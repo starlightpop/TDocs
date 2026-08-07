@@ -3,6 +3,7 @@ const { app, BrowserWindow, Menu, shell, ipcMain, dialog, clipboard } = require(
 const fs = require('fs')
 const path = require('path')
 const { runCode } = require('./code-runner.cjs')
+const { checkForUpdates, downloadUpdate, applyMacUpdate, applyWinUpdate } = require('./updater.cjs')
 
 const isMac = process.platform === 'darwin'
 
@@ -129,6 +130,31 @@ function registerIpc() {
   ipcMain.handle('run-code', async (_event, payload) => runCode(payload))
   ipcMain.handle('clipboard-read-text', () => clipboard.readText())
   ipcMain.handle('clipboard-read-html', () => clipboard.readHTML())
+  // 自更新：检查 / 下载 / 应用
+  ipcMain.handle('update-check', async () => {
+    try {
+      return await checkForUpdates()
+    } catch (error) {
+      return { hasUpdate: false, error: String(error?.message || error) }
+    }
+  })
+  ipcMain.handle('update-download', async () => {
+    const info = await checkForUpdates()
+    if (!info.hasUpdate) return { ...info, filePath: '' }
+    const filePath = await downloadUpdate(info.assetUrl, info.assetName, (percent) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('update-progress', { percent })
+      }
+    })
+    return { ...info, filePath }
+  })
+  ipcMain.handle('update-apply', async (_event, filePath) => {
+    if (process.platform === 'darwin') applyMacUpdate(filePath)
+    else applyWinUpdate(filePath)
+    // 给渲染层留出响应时间后退出，由外部脚本接管替换
+    setTimeout(() => app.quit(), 300)
+    return true
+  })
   ipcMain.handle('toggle-maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return false

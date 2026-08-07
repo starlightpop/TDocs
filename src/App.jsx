@@ -316,6 +316,18 @@ export default function App() {
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsTab, setSettingsTab] = useState('general')
+  // 启动后静默检查更新：有新版本时右下角提示，点击直达设置页更新区
+  const [updateHint, setUpdateHint] = useState(null)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const result = await window.tdocs?.updateCheck?.()
+        if (result?.hasUpdate) setUpdateHint({ latest: result.latest })
+      } catch { /* 静默失败不打扰 */ }
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [])
   const [showOutline, setShowOutline] = useState(false)
   const [showFindReplace, setShowFindReplace] = useState(false)
   const [showVersionHistory, setShowVersionHistory] = useState(false)
@@ -1388,9 +1400,17 @@ export default function App() {
         </main>
       </div>
 
+      {updateHint && !showSettings && (
+        <div className="update-hint" onClick={() => { setShowSettings(true); setSettingsTab('about') }}>
+          <span className="update-hint-dot" />
+          <span>发现新版本 <strong>v{updateHint.latest}</strong>，点击更新</span>
+          <button className="icon-btn update-hint-close" title="忽略" onClick={(e) => { e.stopPropagation(); setUpdateHint(null) }}><Icon name="x" size={12} /></button>
+        </div>
+      )}
       {showSettings && (
         <SettingsDialog
           onClose={() => setShowSettings(false)}
+          initialTab={settingsTab}
           themePref={themePref}
           setThemePref={setThemePref}
           themes={THEMES}

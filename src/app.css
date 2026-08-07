@@ -3632,3 +3632,34 @@ html.platform-mac .topbar .menu {
   line-height: 1;
 }
 
+
+/* ---------- 自更新 ---------- */
+.update-hint {
+  position: fixed; right: 18px; bottom: 42px; z-index: 1400;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+  font-size: 13px; cursor: pointer; animation: update-hint-in .25s ease;
+}
+@keyframes update-hint-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.update-hint-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.update-hint-close { margin-left: 2px; }
+.update-panel { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; max-width: 460px; }
+.update-notes {
+  max-height: 160px; overflow-y: auto; white-space: pre-wrap;
+  font-size: 12px; line-height: 1.6; color: var(--text-2);
+  padding: 10px 12px; border-radius: 8px; background: var(--surface-2);
+  width: 100%; box-sizing: border-box;
+}
+.update-progress {
+  width: 100%; height: 6px; border-radius: 3px;
+  background: var(--surface-3); overflow: hidden;
+}
+.update-progress i {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--accent); transition: width .15s linear;
+}

@@ -6,13 +6,81 @@ const TABS = [
   ['general', '常规', 'doc'],
   ['appearance', '外观', 'highlight'],
   ['ai', 'AI 模型', 'sparkle'],
+  ['about', '关于与更新', 'info'],
 ]
+
+// 应用内自更新卡片：检查 GitHub Releases → 下载 → 应用（退出后由外部脚本替换重启）
+function UpdateCard() {
+  const [state, setState] = useState('idle') // idle | checking | latest | available | downloading | ready | error | applying
+  const [info, setInfo] = useState(null)
+  const [progress, setProgress] = useState(0)
+  const [filePath, setFilePath] = useState('')
+  useEffect(() => window.tdocs?.onUpdateProgress?.(({ percent }) => {
+    setState((s) => (s === 'downloading' ? s : s))
+    setProgress(percent)
+  }), [])
+  const check = async () => {
+    setState('checking')
+    const result = await window.tdocs?.updateCheck?.()
+    if (!result) { setState('error'); return }
+    if (result.error) { setInfo({ error: result.error }); setState('error'); return }
+    setInfo(result)
+    setState(result.hasUpdate ? 'available' : 'latest')
+  }
+  const download = async () => {
+    setState('downloading')
+    setProgress(0)
+    const result = await window.tdocs?.updateDownload?.()
+    if (!result?.filePath) { setState('error'); setInfo({ error: '下载失败，请重试' }); return }
+    setFilePath(result.filePath)
+    setState('ready')
+  }
+  const apply = async () => {
+    setState('applying')
+    await window.tdocs?.updateApply?.(filePath)
+  }
+  return (
+    <div className="settings-page">
+      <h2>关于与更新</h2>
+      <div className="settings-field-group">
+        <label>当前版本</label>
+        <div className="settings-note">TDocs v{__APP_VERSION__} · 本地文档编辑器</div>
+      </div>
+      <div className="settings-field-group">
+        <button className="btn" onClick={check} disabled={state === 'checking' || state === 'downloading' || state === 'applying'}>
+          {state === 'checking' ? '正在检查…' : state === 'downloading' ? `下载中 ${progress}%` : state === 'applying' ? '正在应用更新…' : '检查更新'}
+        </button>
+        {state === 'latest' && <div className="settings-note" style={{ color: 'var(--ok, #2e9e5b)' }}>已是最新版本（v{info?.latest || __APP_VERSION__}）</div>}
+        {state === 'error' && <div className="settings-note" style={{ color: 'var(--danger)' }}>{info?.error || '检查更新失败，请检查网络后重试'}</div>}
+        {state === 'available' && (
+          <div className="update-panel">
+            <div className="settings-note">发现新版本 <strong>v{info?.latest}</strong>（当前 v{__APP_VERSION__}）</div>
+            <div className="update-notes">{info?.notes || '（无更新说明）'}</div>
+            <button className="btn btn-primary" onClick={download}>下载并更新</button>
+          </div>
+        )}
+        {state === 'downloading' && (
+          <div className="update-panel">
+            <div className="settings-note">正在下载 v{info?.latest}（{info?.size ? `${Math.round(info.size / 1024 / 1024)}MB` : ''}）…</div>
+            <div className="update-progress"><i style={{ width: `${Math.max(3, progress)}%` }} /></div>
+          </div>
+        )}
+        {state === 'ready' && (
+          <div className="update-panel">
+            <div className="settings-note">下载完成，点击应用更新。应用将自动退出并替换为新版本。</div>
+            <button className="btn btn-primary" onClick={apply}>立即应用更新</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function SettingsDialog({
   onClose, themePref, setThemePref, themes, themeGroups, theme,
-  lightKey, darkKey, setLightKey, setDarkKey,
+  lightKey, darkKey, setLightKey, setDarkKey, initialTab = 'general',
 }) {
-  const [tab, setTab] = useState('general')
+  const [tab, setTab] = useState(initialTab)
   useEffect(() => {
     const close = (event) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', close)
@@ -78,6 +146,7 @@ export default function SettingsDialog({
               </div>
             )}
             {tab === 'ai' && <div className="settings-page"><h2>AI 模型</h2><AiPanel embedded /></div>}
+            {tab === 'about' && <UpdateCard />}
           </div>
         </div>
       </section>
