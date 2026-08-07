@@ -207,9 +207,10 @@ async function firstAvailable(candidates, options) {
       env: candidate.env || options?.env,
     })
     // 可用的判据：进程真实产出（输出/正确退出），或进程确实不存在（ENOENT）。
-    // 零输出且非零退出的“幽灵进程”（如 Windows 的 python Store 别名）视为不可用，
-    // 继续尝试下一个候选——否则用户只会看到静默失败，没有任何环境提示。
-    const ghost = !result.ok && !result.stdout && !result.stderr && !result.missing
+    // Windows 的 python Store 别名：能 spawn 但零输出且非零退出（如 9009）。
+    // 仅在 Windows 上把这种“幽灵进程”视为不可用并继续尝试下一个候选；
+    // Mac/Linux 上用户代码本身就可能零输出退出（如 sys.exit(1)），不能误判。
+    const ghost = process.platform === 'win32' && !result.ok && !result.stdout && !result.stderr && !result.missing
     if (!result.missing && !ghost) {
       return { ...result, runtime: candidate.label || candidate.command }
     }

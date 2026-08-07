@@ -17,7 +17,7 @@ export default function CodeTerminal({ run, onClose }) {
     const preferredTop = anchor.bottom + 10
     const top = preferredTop + HEIGHT <= window.innerHeight - 12
       ? preferredTop
-      : Math.max(12, anchor.top - HEIGHT - 10)
+      : Math.max(64, anchor.top - HEIGHT - 10) // 避开自绘标题栏（56px），否则落在拖动区域无法关闭/拖动
     const left = clamp(anchor.left, 12, Math.max(12, window.innerWidth - WIDTH - 12))
     setPosition({ top, left })
   }, [run?.id])
@@ -25,7 +25,7 @@ export default function CodeTerminal({ run, onClose }) {
   useEffect(() => {
     if (!run) return undefined
     const onResize = () => setPosition((current) => ({
-      top: clamp(current.top, 8, Math.max(8, window.innerHeight - 100)),
+      top: clamp(current.top, 64, Math.max(64, window.innerHeight - 100)),
       left: clamp(current.left, 8, Math.max(8, window.innerWidth - WIDTH - 8)),
     }))
     window.addEventListener('resize', onResize)

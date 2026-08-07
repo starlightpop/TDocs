@@ -224,6 +224,22 @@ lowlight.register('rust', rust)
 lowlight.register('matlab', matlab)
 const countCodeLines = (text) => Math.max(1, String(text || '').split('\n').length)
 
+// 退出代码块：光标移到代码块后的段落（无段落则新建）。供 ⌘Enter / Esc 共用。
+function exitCodeBlock(editor) {
+  const { state, view } = editor
+  const { $from, empty } = state.selection
+  if (!empty || $from.parent.type.name !== 'codeBlock') return false
+  const depth = $from.depth
+  const after = $from.after(depth)
+  const next = state.doc.nodeAt(after)
+  let tr = state.tr
+  if (next?.type.name !== 'paragraph') tr = tr.insert(after, state.schema.nodes.paragraph.create())
+  const target = Math.min(tr.doc.content.size, after + 1)
+  tr = tr.setSelection(TextSelection.near(tr.doc.resolve(target))).scrollIntoView()
+  view.dispatch(tr)
+  return true
+}
+
 const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
   addKeyboardShortcuts() {
     return {
@@ -258,6 +274,12 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         return true
       },
       Escape: () => {
+        const { state, view } = this.editor
+        const { $from, empty } = state.selection
+        // 代码块内按 Esc 直接退出（部分输入法会抢占 ⌘Enter，Esc 是最可靠的兜底）
+        if (empty && $from.parent.type.name === 'codeBlock') {
+          return exitCodeBlock(this.editor)
+        }
         this.editor.view.dom.dispatchEvent(new CustomEvent('tdocs:hide-code-completions'))
         return false
       },
@@ -270,21 +292,8 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         view.dispatch(tr)
         return true
       },
-      // 唯一退出方式（除点击代码块外部）：⌘Enter / Ctrl+Enter
-      'Mod-Enter': () => {
-        const { state, view } = this.editor
-        const { $from, empty } = state.selection
-        if (!empty || $from.parent.type.name !== 'codeBlock') return false
-        const depth = $from.depth
-        const after = $from.after(depth)
-        const next = state.doc.nodeAt(after)
-        let tr = state.tr
-        if (next?.type.name !== 'paragraph') tr = tr.insert(after, state.schema.nodes.paragraph.create())
-        const target = Math.min(tr.doc.content.size, after + 1)
-        tr = tr.setSelection(TextSelection.near(tr.doc.resolve(target))).scrollIntoView()
-        view.dispatch(tr)
-        return true
-      },
+      // 退出方式（除点击代码块外部）：⌘Enter / Ctrl+Enter / Esc
+      'Mod-Enter': () => exitCodeBlock(this.editor),
     }
   },
   addNodeView() {
@@ -357,7 +366,7 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       const footer = document.createElement('div')
       footer.className = 'code-block-footer'
       footer.contentEditable = 'false'
-      footer.textContent = 'Tab 补全 · Shift+Tab 减少缩进 · ⌘Enter / Ctrl+Enter 退出代码块'
+      footer.textContent = 'Tab 补全 · Shift+Tab 减少缩进 · ⌘Enter / Ctrl+Enter / Esc 退出代码块'
       shell.append(head, body, footer, completionMenu)
 
       const syncActiveLine = () => {

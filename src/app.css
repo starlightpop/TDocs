@@ -2503,6 +2503,8 @@ html.platform-mac .topbar .menu {
 .code-terminal {
   position: fixed;
   z-index: 500;
+  /* 自绘标题栏为 app-region: drag，其矩形区域会拦截鼠标；no-drag 保证弹窗可点击可拖动 */
+  -webkit-app-region: no-drag;
   width: 460px;
   max-width: 90vw;
   overflow: hidden;
