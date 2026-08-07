@@ -28,7 +28,8 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableCell from '@tiptap/extension-table-cell'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
+import { DOMParser as PMDOMParser, DOMSerializer as PMDOMSerializer } from '@tiptap/pm/model'
+import { nodesToMd } from '../lib/exporter.js'
 import { looksLikeMarkdown, renderMarkdown, shouldPreferMarkdownPaste } from '../lib/markdown.js'
 import { extractHeadings } from '../lib/headings.js'
 import { storage as idbStorage } from '../lib/idb.js'
@@ -78,6 +79,40 @@ function applyPasteData(view, { text = '', html = '' } = {}) {
 }
 
 const isMdFile = (file) => /\.(md|markdown|mdown)$/i.test(file?.name || '')
+
+// 选区 → 剪贴板：text/plain 用 Markdown 语法（#、-、**），text/html 保留富文本。
+// 这样从 TDocs 复制出去，粘贴到任意 Markdown 编辑器都能被识别。
+function copyAsMarkdown(view, event) {
+  try {
+    let slice = view.state.selection.content()
+    // PM state 选区可能与 DOM 选区未同步（如 ⌘A 全选后立即复制），用 DOM 选区兜底
+    if (!slice || slice.content.size === 0) {
+      const doc = view.dom.ownerDocument || document
+      const domSel = doc.getSelection()
+      if (domSel && !domSel.isCollapsed && domSel.rangeCount) {
+        const range = domSel.getRangeAt(0)
+        const from = view.posAtDOM(range.startContainer, range.startOffset)
+        const to = view.posAtDOM(range.endContainer, range.endOffset)
+        if (typeof from === 'number' && typeof to === 'number' && to > from) {
+          slice = view.state.doc.slice(from, to)
+        }
+      }
+    }
+    if (!slice || slice.content.size === 0) return false
+    const fragment = PMDOMSerializer.fromSchema(view.state.schema).serializeFragment(slice.content)
+    const wrapper = document.createElement('div')
+    wrapper.append(fragment)
+    const html = wrapper.innerHTML
+    const md = nodesToMd(wrapper).replace(/\n{3,}/g, '\n\n').trim()
+    if (!html && !md) return false
+    event.clipboardData.setData('text/html', html)
+    event.clipboardData.setData('text/plain', md || html)
+    event.preventDefault()
+    return true
+  } catch {
+    return false
+  }
+}
 
 // ---------- 字号 + 字体：基于 TextStyle 扩展两个属性，避免重复注册同名 mark ----------
 const FontStyleExt = TextStyle.extend({
@@ -515,6 +550,18 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     content: doc?.content || '',
     editorProps: {
       attributes: { class: 'editor-content' },
+      // 复制/剪切：text/plain 换成 Markdown 语法（标题 #、列表 -、加粗 **），
+      // 粘贴到任意 Markdown 编辑器都能被识别；text/html 保持富文本不变。
+      handleCopy: (view, event) => {
+        if (view.state.selection.empty) return false
+        return copyAsMarkdown(view, event)
+      },
+      handleCut: (view, event) => {
+        if (view.state.selection.empty) return false
+        copyAsMarkdown(view, event)
+        view.dispatch(view.state.tr.deleteSelection().scrollIntoView())
+        return true
+      },
       handleDrop: (view, event) => {
         const file = event.dataTransfer?.files?.[0]
         if (!file) return false

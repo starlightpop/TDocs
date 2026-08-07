@@ -2,7 +2,7 @@
   "name": "tdocs",
   "productName": "TDocs",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "TDocs — 本地优先的智能文档编辑器（深色模式 / AI 改写 / 代码块 / 版本历史）· Preview 预览版",
   "author": "twffsz",
   "main": "electron/main.cjs",

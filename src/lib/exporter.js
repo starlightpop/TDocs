@@ -195,7 +195,7 @@ export async function exportEpub(title, html) {
   downloadBlob(`${safeTitle}.epub`, blob)
 }
 
-function nodesToMd(parent, ctx = {}) {
+export function nodesToMd(parent, ctx = {}) {
   let out = ''
   for (const node of parent.childNodes) out += nodeToMd(node, ctx)
   return out

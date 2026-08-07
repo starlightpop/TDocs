@@ -5,6 +5,17 @@ const path = require('path')
 const { runCode } = require('./code-runner.cjs')
 const { checkForUpdates, downloadUpdate, applyMacUpdate, applyWinUpdate } = require('./updater.cjs')
 
+// 测试/开发隔离：--tdocs-test 或 TDOCS_USER_DATA 时使用独立数据目录，
+// localStorage / IndexedDB 与正式版完全隔离——自动化测试绝不触碰真实文档。
+// 必须在 app ready 之前调用。
+if (process.argv.includes('--tdocs-test') || process.env.TDOCS_USER_DATA) {
+  const testData = process.env.TDOCS_USER_DATA
+    ? path.resolve(process.env.TDOCS_USER_DATA)
+    : path.join(app.getPath('temp'), 'tdocs-test-data')
+  app.setPath('userData', testData)
+  console.log('[tdocs-test] 独立数据目录:', testData)
+}
+
 const isMac = process.platform === 'darwin'
 
 /** 导出用完整 HTML 文档（带基础排版样式） */
