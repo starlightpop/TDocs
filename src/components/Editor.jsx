@@ -43,11 +43,28 @@ import SlashMenu from './SlashMenu.jsx'
 import { isValidTriggerContext } from '../lib/slashCommands.js'
 import { CODE_LANGUAGES, getCodeLanguageLabel, getCodeCompletionCandidates, resolveCodeCompletion } from '../lib/codeLanguage.js'
 
-// 将 HTML 内容转换并插入到编辑器指定位置
+// 将 HTML 内容转换并插入到编辑器指定位置。
+// 插入后光标自动落到内容末尾之后（避开代码块等叶子块）——
+// 粘贴 Markdown 即使识别出代码块，光标也不困在代码块内。
 function insertHtmlContent(view, html, pos) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(doc.body)
-  const tr = pos != null ? view.state.tr.insert(pos, slice.content) : view.state.tr.replaceSelection(slice)
+  let tr = pos != null ? view.state.tr.insert(pos, slice.content) : view.state.tr.replaceSelection(slice)
+  const end = Math.min(tr.doc.content.size, (pos != null ? pos : tr.selection.from) + slice.content.size)
+  let cursor = end
+  const endRes = tr.doc.resolve(Math.max(0, Math.min(cursor, tr.doc.content.size)))
+  // 光标若落在代码块内（内容末尾即代码块、文档无后续块）：代码块后新建段落再落光标
+  if (endRes.parent.type.name === 'codeBlock') {
+    const blockEnd = endRes.after(endRes.depth)
+    if (blockEnd >= tr.doc.content.size) {
+      tr = tr.insert(tr.doc.content.size, tr.doc.type.schema.nodes.paragraph.create())
+      cursor = Math.max(0, tr.doc.content.size - 1)
+    } else {
+      cursor = blockEnd
+    }
+  }
+  // bias=1 向后找最近的可落点：若末尾是代码块，光标落在其后的段落，而非代码块内
+  tr.setSelection(TextSelection.near(tr.doc.resolve(cursor), 1))
   view.dispatch(tr.scrollIntoView())
 }
 

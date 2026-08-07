@@ -1,7 +1,10 @@
 // Markdown 识别与转换：粘贴、拖入 .md 文件以及编辑器输入规则共用。
+// 注意：禁用“4 空格缩进即代码块”规则（markdown-it 默认启用）——
+// VS Code 等编辑器的 md 源文件里缩进很常见，粘贴时会把普通文字误判成代码块。
+// 只保留显式的围栏代码块（```）识别。
 import MarkdownIt from 'markdown-it'
 
-const md = new MarkdownIt({ html: false, breaks: true, linkify: true })
+const md = new MarkdownIt({ html: false, breaks: true, linkify: true }).disable('code')
 
 const BLOCK_MARKDOWN_PATTERNS = [
   /^\s{0,3}#{1,6}\s+\S/,                 // 标题
