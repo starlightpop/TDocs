@@ -226,7 +226,17 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
         this.editor.view.dom.dispatchEvent(new CustomEvent('tdocs:hide-code-completions'))
         return false
       },
-      'Mod-c': () => {
+      // 代码块内回车永远只是换行：不允许通过连续回车退出代码块
+      Enter: () => {
+        const { state, view } = this.editor
+        const { $from } = state.selection
+        if ($from.parent.type.name !== 'codeBlock') return false
+        const tr = state.tr.deleteSelection().insertText('\n').scrollIntoView()
+        view.dispatch(tr)
+        return true
+      },
+      // 唯一退出方式（除点击代码块外部）：⌘Enter / Ctrl+Enter
+      'Mod-Enter': () => {
         const { state, view } = this.editor
         const { $from, empty } = state.selection
         if (!empty || $from.parent.type.name !== 'codeBlock') return false
@@ -312,7 +322,7 @@ const CodeBlock = CodeBlockLowlight.configure({ lowlight }).extend({
       const footer = document.createElement('div')
       footer.className = 'code-block-footer'
       footer.contentEditable = 'false'
-      footer.textContent = 'Tab 补全 · Shift+Tab 减少缩进 · ⌘C / Ctrl+C 退出代码块'
+      footer.textContent = 'Tab 补全 · Shift+Tab 减少缩进 · ⌘Enter / Ctrl+Enter 退出代码块'
       shell.append(head, body, footer, completionMenu)
 
       const syncActiveLine = () => {

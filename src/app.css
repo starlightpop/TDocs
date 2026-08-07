@@ -3213,8 +3213,9 @@ html.platform-mac .topbar .menu {
   font: inherit !important; line-height: var(--code-line-height) !important; white-space: pre; tab-size: 2;
 }
 .code-gutter {
-  display: flex !important; flex-direction: column; box-sizing: border-box; padding: 12px 0 !important;
+  display: flex !important; flex-direction: column; box-sizing: border-box; padding: 14px 0 !important;
   border-right: 1px solid var(--border); font: 400 var(--code-font-size)/var(--code-line-height) var(--font-mono) !important;
+  font-size: var(--code-font-size) !important; line-height: var(--code-line-height) !important;
 }
 .code-gutter > span {
   display: block; height: var(--code-line-height); min-height: var(--code-line-height);
@@ -3249,10 +3250,17 @@ html.platform-mac .topbar .menu {
 
 /* Code block uses valid sibling layers: gutter + independently scrollable code. */
 .code-block-shell {
-  --code-font-size: 14px;
-  --code-line-height: 26px;
+  /* 变量在 shell 层钉死：.editor-content pre 里定义了 --code-line-height: 1.6（无单位），
+     特异性更高，会让 code 行高变成 22.4px 而 gutter 是 26px，逐行累积错位。
+     !important + 重复定义双重保证两列共享同一字体度量。 */
+  --code-font-size: 14px !important;
+  --code-line-height: 26px !important;
   position: relative;
   overflow: visible !important;
+}
+.code-block-shell pre {
+  --code-font-size: 14px !important;
+  --code-line-height: 26px !important;
 }
 .code-block-body {
   display: grid;
@@ -3362,6 +3370,10 @@ html.platform-mac .topbar .menu {
   height: auto !important;
   pointer-events: none !important;
   text-align: right !important;
+  /* 与代码列共用完全相同的字体度量：字号/行高/垂直内边距一致，否则逐行累积错位 */
+  font-size: var(--code-font-size) !important;
+  line-height: var(--code-line-height) !important;
+  padding: 14px 0 !important;
 }
 .code-block-body > .code-scroll {
   position: relative !important;

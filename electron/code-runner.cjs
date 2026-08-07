@@ -206,17 +206,24 @@ async function firstAvailable(candidates, options) {
       ...options,
       env: candidate.env || options?.env,
     })
-    if (!result.missing) {
+    // 可用的判据：进程真实产出（输出/正确退出），或进程确实不存在（ENOENT）。
+    // 零输出且非零退出的“幽灵进程”（如 Windows 的 python Store 别名）视为不可用，
+    // 继续尝试下一个候选——否则用户只会看到静默失败，没有任何环境提示。
+    const ghost = !result.ok && !result.stdout && !result.stderr && !result.missing
+    if (!result.missing && !ghost) {
       return { ...result, runtime: candidate.label || candidate.command }
     }
     last = result
   }
-  return last || {
+  if (last && last.missing) return last
+  // 所有候选都失败（含“幽灵进程”）：统一视为环境缺失，触发安装指引。
+  return {
     ok: false,
     missing: true,
     stdout: '',
-    stderr: '未找到运行环境。',
-    exitCode: null,
+    stderr: last?.error || '未找到可用的运行环境。',
+    exitCode: last?.exitCode ?? null,
+    error: last?.error,
   }
 }
 
@@ -270,14 +277,18 @@ async function runCode(payload = {}) {
     } else if (language === 'python') {
       const source = path.join(dir, 'main.py')
       await fs.promises.writeFile(source, code, 'utf8')
-      result = await firstAvailable(
-        [
-          { command: process.env.TDOCS_PYTHON || 'python3', args: [source], label: 'Python 3' },
-          { command: 'python', args: [source], label: 'Python' },
-          { command: 'py', args: ['-3', source], label: 'Python Launcher' },
-        ],
-        { cwd: dir, timeoutMs },
-      )
+      // Windows 上 py（Python Launcher）最可靠；python 可能是 Store 别名（能启动但跑不了）
+      const candidates = process.platform === 'win32'
+        ? [
+            { command: process.env.TDOCS_PYTHON || 'py', args: ['-3', source], label: 'Python Launcher' },
+            { command: 'python', args: [source], label: 'Python' },
+          ]
+        : [
+            { command: process.env.TDOCS_PYTHON || 'python3', args: [source], label: 'Python 3' },
+            { command: 'python', args: [source], label: 'Python' },
+            { command: 'py', args: ['-3', source], label: 'Python Launcher' },
+          ]
+      result = await firstAvailable(candidates, { cwd: dir, timeoutMs })
     } else if (language === 'c' || language === 'cpp') {
       const ext = language === 'c' ? 'c' : 'cpp'
       const source = path.join(dir, `main.${ext}`)
