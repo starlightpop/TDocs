@@ -524,7 +524,7 @@ function AiAcceptCard({ editor, diff, onResolve }) {
   )
 }
 
-export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, onMultiAi, onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline, onOpenFind, onOpenHistory, onOpenExport }) {
+export default function Editor({ doc, onChange, onStats, onReady, onHeadings, onAi, onMultiAi, onSelection, onSelectionRange, aiSelection = null, aiInline = null, onResolveInline, onOpenFind, onOpenHistory, onOpenExport, initialViewPos = null, initialScrollTop = null }) {
   const saveTimer = useRef(null)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [terminalRun, setTerminalRun] = useState(null)
@@ -711,6 +711,27 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     onHeadings?.(extractHeadings(editor))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, doc?.id, doc?.content])
+
+  // 切文档回到本编辑器时，恢复上次的光标位置与滚动位置（不丢阅读/编辑进度）
+  const restoredViewRef = useRef(false)
+  useEffect(() => {
+    if (!editor || !initialViewPos && initialScrollTop == null) return undefined
+    if (restoredViewRef.current) return undefined
+    // 双帧确保 ProseMirror 内容已渲染（回填后的 pos 才可靠）
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoredViewRef.current = true
+        const canvas = canvasRef.current
+        if (canvas && initialScrollTop != null) canvas.scrollTop = initialScrollTop
+        if (initialViewPos != null) {
+          try {
+            editor.chain().focus().setTextSelection(initialViewPos).run()
+          } catch { /* pos 越界等场景静默忽略，保持默认视图 */ }
+        }
+      })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [editor, initialViewPos, initialScrollTop, doc?.id])
 
   useEffect(() => () => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
