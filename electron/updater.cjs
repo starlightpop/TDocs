@@ -9,6 +9,16 @@ const REPO = 'starlightpop/TDocs'
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`
 const HEADERS = { 'User-Agent': 'TDocs-Updater', Accept: 'application/vnd.github+json' }
 
+/** 把 GitHub Release 直链转成国内镜像，避开科学上网限制。 */
+function mirrorToDomestic(url) {
+  if (!url) return url
+  // https://github.com/starlightpop/TDocs/releases/download/v0.2.8/xxx.zip
+  // →  https://ghfast.top/https://github.com/starlightpop/TDocs/releases/download/v0.2.8/xxx.zip
+  const m = url.match(/^https:\/\/github\.com\/.+\/releases\/download\/v[\d.]+\/[^/]+$/)
+  if (!m) return url
+  return `https://ghfast.top/${url}`
+}
+
 /** 纯数字 semver 比较（0.2.2 < 0.2.10）。返回 1 / -1 / 0。 */
 function semverCompare(a, b) {
   const pa = String(a || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
@@ -49,7 +59,7 @@ async function checkForUpdates() {
     latest: remote,
     notes: String(release.body || '').slice(0, 4000),
     assetName: asset?.name || '',
-    assetUrl: asset?.browser_download_url || '',
+    assetUrl: mirrorToDomestic(asset?.browser_download_url || ''),
     size: asset?.size || 0,
   }
 }
