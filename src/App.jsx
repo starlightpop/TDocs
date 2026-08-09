@@ -361,6 +361,8 @@ export default function App() {
 
   const [headings, setHeadings] = useState([])
   const [activeHeadingIdx, setActiveHeadingIdx] = useState(-1)
+  // 每个文档记忆的视图位置（光标 pos + 滚动 top），切换时恢复，不丢阅读/编辑进度
+  const viewPosByDoc = useRef({})  // { [docId]: { pos, scrollTop } }
   const [modal, setModal] = useState(null) // {type:'rename'|'delete', doc}
 
   // ---------- 分组 ----------
@@ -719,10 +721,22 @@ export default function App() {
   // 已上移到 jumpSuppressRef 之后，避免 TDZ。
 
   // ---------- 操作 ----------
+  const captureViewPos = () => {
+    // 切走前把当前文档的光标 pos + 滚动位置存入记忆，切回时恢复
+    const ed = editorRef.current
+    const id = activeIdRef.current
+    if (!ed || !id) return
+    const pos = ed.state.selection.from ?? -1
+    const canvas = document.querySelector('.canvas')
+    const scrollTop = canvas ? canvas.scrollTop : 0
+    if (pos >= 0) viewPosByDoc.current[id] = { pos, scrollTop }
+  }
+
   const handleCreate = (group = '') => {
     const doc = createDoc('无标题文档', '', { group })
     doc.group = group || ''
     persist([doc, ...docs])
+    captureViewPos()  // 新建文档前记住当前文档位置，切回可恢复
     setActiveId(doc.id)
     setEditor(null)
     setHeadings([])
@@ -736,6 +750,7 @@ export default function App() {
     if (id !== activeId && activeDoc) {
       // 内容每击键已同步落盘 localStorage，切换不会丢；清除该文档的 recovery 残留，
       // 避免下次启动误弹恢复面板（版本快照仍由 saveVersionSnapshot 保留）
+      captureViewPos()
       if (idbStorage().isUsable) {
         idbStorage().deleteRecovery(activeDoc.id).catch(() => {})
       }
@@ -816,6 +831,7 @@ export default function App() {
         const next = docs.filter((d) => d.id !== doc.id)
         persist(next)
         if (activeId === doc.id) {
+          captureViewPos()  // 删除当前文档前记住（虽然后续可能不再访问，保持一致）
           setActiveId(next[0]?.id || null)
           setEditor(null)
         }
@@ -911,6 +927,7 @@ export default function App() {
       return { ...createDoc(title, content, { kind: activeDoc?.kind || 'document', paper: activeDoc?.paper || 'a4' }), group: '' }
     })
     persist([...newDocs, ...docs])
+    captureViewPos()  // 打开多文档前记住当前文档位置
     setActiveId(newDocs[0].id)
     setEditor(null)
     setHeadings([])
@@ -1296,6 +1313,8 @@ export default function App() {
                 onStats={setStats}
                 onHeadings={setHeadings}
                 onReady={(ed) => { editorRef.current = ed; setEditor(ed) }}
+                initialViewPos={viewPosByDoc.current[activeDoc.id]?.pos ?? null}
+                initialScrollTop={viewPosByDoc.current[activeDoc.id]?.scrollTop ?? null}
                 onAi={openAi}
                 onMultiAi={openMultiAi}
                 onSelection={setSelectedChars}
