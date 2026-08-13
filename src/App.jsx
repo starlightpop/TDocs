@@ -733,7 +733,15 @@ export default function App() {
   }
 
   const handleCreate = (group = '') => {
-    const doc = createDoc('无标题文档', '', { group })
+    const baseTitle = '无标题文档'
+    let title = baseTitle
+    let counter = 1
+    const existingTitles = new Set(docs.map(d => d.title))
+    while (existingTitles.has(title)) {
+      counter++
+      title = `${baseTitle} ${counter}`
+    }
+    const doc = createDoc(title, '', { group })
     doc.group = group || ''
     persist([doc, ...docs])
     captureViewPos()  // 新建文档前记住当前文档位置，切回可恢复
@@ -847,7 +855,7 @@ export default function App() {
   // 文件重命名：直接原处内联编辑后提交
   const doRenameDoc = (doc, name) => {
     const fallback = '无标题文档'
-    persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || fallback, updatedAt: Date.now() } : d)))
+    persist(docs.map((d) => (d.id === doc.id ? { ...d, title: name?.trim() || fallback, autoTitle: false, updatedAt: Date.now() } : d)))
   }
 
   const handleTogglePin = (doc) => {

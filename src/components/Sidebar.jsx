@@ -98,7 +98,27 @@ export default function Sidebar({
       <div
         className={`doc-item${doc.id === activeId ? ' active' : ''}${doc.pinned ? ' pinned' : ''}`}
         onClick={() => { if (editingDocId === doc.id) return; onSelect(doc.id) }}
-        onDoubleClick={() => { setDocEditName(doc.title || ''); setEditingDocId(doc.id) }}
+        onDoubleClick={() => {
+          if (doc.autoTitle) {
+            // 默认标题 → 从内容第一行取候选
+            let firstLine = ''
+            if (doc.content) {
+              const div = document.createElement('div')
+              div.innerHTML = doc.content
+              for (const child of div.children) {
+                const text = child.textContent.trim()
+                if (text) {
+                  firstLine = text.replace(/^#\s+/, '')  // Markdown 标题前缀
+                  break
+                }
+              }
+            }
+            setDocEditName(firstLine || '')
+          } else {
+            setDocEditName(doc.title || '')
+          }
+          setEditingDocId(doc.id)
+        }}
         draggable
         onDragStart={(e) => {
           // 自定义拖拽跟手卡片，替换默认拖影
