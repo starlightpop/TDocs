@@ -444,6 +444,10 @@ html.platform-mac .topbar .menu {
   margin: 2px 4px 6px 14px;
   padding-left: 8px;
   border-left: 2px solid var(--border);
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .doc-heading {
   padding: 3px 8px;
