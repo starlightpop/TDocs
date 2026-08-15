@@ -84,13 +84,35 @@ function applyPasteData(view, { text = '', html = '' } = {}) {
     return true
   }
   if (!html && text?.includes('\n')) {
+    // 连续空行作为段落分隔（Google Docs / Markdown 复制习惯），
+    // 段落内单换行保留为 <br>，不再产生大量空段落
     const paras = text
       .replace(/\r/g, '')
-      .split('\n')
-      .map((l) => `<p>${escapeHtmlText(l) || '<br>'}</p>`)
+      .split(/\n{2,}/)
+      .map((block) => {
+        const clean = block.trim()
+        if (!clean) return null
+        const lines = clean.split('\n').map((l) => escapeHtmlText(l.trim()))
+        return `<p>${lines.join('<br>')}</p>`
+      })
+      .filter(Boolean)
       .join('')
-    insertHtmlContent(view, paras, null)
-    return true
+    if (paras) {
+      insertHtmlContent(view, paras, null)
+      return true
+    }
+  }
+  // HTML 存在且非 markdown：清理空段落再插入，避免 Google Docs 等源的大量空行
+  if (html) {
+    const cleaned = html
+      .replace(/<p>[ \t\n\r]*<\/p>/gi, '')
+      .replace(/<br>\s*<br>/gi, '<br>')
+    const frag = document.createRange().createContextualFragment(cleaned)
+    const parsed = PMDOMParser.fromSchema(view.state.schema).parse(frag)
+    if (parsed && parsed.content.size > 0) {
+      view.dispatch(view.state.tr.replaceSelection(parsed).scrollIntoView())
+      return true
+    }
   }
   return false
 }
@@ -826,26 +848,32 @@ export default function Editor({ doc, onChange, onStats, onReady, onHeadings, on
     const { $from, $to } = editor.state.selection
     const inCode = $from.parent.type.name === 'codeBlock' || $to.parent.type.name === 'codeBlock'
     const pasteText = async () => {
-      const text = await window.tdocs?.readClipboardText?.() ?? await navigator.clipboard.readText()
-      const html = await window.tdocs?.readClipboardHTML?.() ?? ''
-      if (!text && !html) return
-      const { state, view } = editor
-      // 代码块内粘贴一律纯文本（不解析 Markdown/HTML）
-      if (inCode) {
-        view.dispatch(state.tr.insertText(text).scrollIntoView())
-        return
-      }
-      // 与 Cmd+V 同一套判断链：Markdown → 多行分段 → 富文本 HTML → 纯文本兜底
-      if (applyPasteData(view, { text, html })) return
-      if (html) {
-        const frag = document.createRange().createContextualFragment(html)
-        const parsed = PMDOMParser.fromSchema(view.state.schema).parse(frag)
-        if (parsed && parsed.content.size > 0) {
-          view.dispatch(state.tr.replaceSelection(parsed).scrollIntoView())
+      try {
+        const text = await window.tdocs?.readClipboardText?.() ?? await navigator.clipboard.readText()
+        const html = await window.tdocs?.readClipboardHTML?.() ?? ''
+        if (!text && !html) return
+        const { state, view } = editor
+        if (inCode) {
+          view.dispatch(state.tr.insertText(text).scrollIntoView())
           return
         }
+        if (applyPasteData(view, { text, html })) return
+        if (html) {
+          const frag = document.createRange().createContextualFragment(html)
+          const parsed = PMDOMParser.fromSchema(view.state.schema).parse(frag)
+          if (parsed && parsed.content.size > 0) {
+            view.dispatch(state.tr.replaceSelection(parsed).scrollIntoView())
+            return
+          }
+        }
+        if (text) view.dispatch(state.tr.insertText(text).scrollIntoView())
+      } catch (e) {
+        console.error('粘贴异常', e)
+        try {
+          const text = await window.tdocs?.readClipboardText?.() ?? ''
+          if (text) editor.view.dispatch(editor.state.tr.insertText(text).scrollIntoView())
+        } catch {}
       }
-      if (text) view.dispatch(state.tr.insertText(text).scrollIntoView())
     }
     const selectAll = () => {
       if (!inCode) { chain().selectAll().run(); return }
